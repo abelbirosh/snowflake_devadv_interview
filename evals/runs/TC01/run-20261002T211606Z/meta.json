@@ -1,0 +1,14 @@
+{
+  "case": "TC01",
+  "type": "happy",
+  "run_id": "run-20261002T211606Z",
+  "started_at": "2026-10-02T21:16:06.891419+00:00",
+  "connection": "<REDACTED>",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "4237e6b",
+  "skill_sha": "6d3d6a04dd64",
+  "prompts": [
+    "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+    "Yes, that project. Skip frequency, show per run."
+  ]
+}

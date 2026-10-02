@@ -1,0 +1,72 @@
+{
+  "case": "TC01",
+  "run_id": "run-20261002T211606Z",
+  "started_at": "2026-10-02T21:16:06.891419+00:00",
+  "ended_at": "2026-10-02T21:38:02.516331+00:00",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "4237e6b",
+  "skill_sha": "6d3d6a04dd64",
+  "cortex": {
+    "session_found": true,
+    "wall_seconds": 1215,
+    "history_length": 30,
+    "agent_mode": "standard",
+    "sql_mode": "write",
+    "user_turns": 2,
+    "assistant_messages": 15,
+    "tool_calls": 23,
+    "tool_calls_by_name": {
+      "skill": 1,
+      "read": 3,
+      "sql_execute": 16,
+      "bash": 3
+    },
+    "skills_invoked": [
+      "dbt-cost-tuning"
+    ],
+    "bash_commands": [
+      "mktemp -d",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wuPlO0zg7L && python3 -c \"\nimport json, sys\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Extract model info\nfor nid, n in sorted(m.get('nodes', {}).items()):\n    if n.get('resource_type') in ('model', 'test'):\n        mat = n.get('",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wuPlO0zg7L && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\nn = m['nodes']['model.tasty_bytes.orders']\nprint(n.get('compiled_code') or n.get('raw_code'))\nprint('---')\nn2 = m['nodes']['model.tasty_bytes.customer_"
+    ],
+    "thinking_blocks": 8,
+    "token_usage": {}
+  },
+  "snowflake": {
+    "queries": 39,
+    "by_type": {
+      "SELECT": 17,
+      "DESCRIBE": 1,
+      "SHOW": 3,
+      "ALTER_SESSION": 16,
+      "GET_FILES": 1,
+      "UNKNOWN": 1
+    },
+    "failed_queries": 3,
+    "est_credits_analysis": 0.004,
+    "total_elapsed_seconds": 63.3,
+    "bytes_scanned_gb": 0.0,
+    "read_only_violations": 0,
+    "account_usage_queries": 6,
+    "account_usage_unbounded": 0
+  },
+  "read_only_violations": [],
+  "failed_queries": [
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "DESCRIBE",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "UNKNOWN",
+      "error_code": 1003,
+      "error_message": "SQL compilation error:\nsyntax error line 1 at position 42 unexpected 'rows'."
+    }
+  ],
+  "account_usage_unbounded": []
+}
