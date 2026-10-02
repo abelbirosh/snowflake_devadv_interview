@@ -23,3 +23,9 @@ models:
       +materialized: view
     marts:
       +materialized: table
+
+## Query comments
+# Append dbt's JSON query comment (includes node_id) to the end of each query so
+# QUERY_HISTORY.query_text can be attributed back to individual models.
+query-comment:
+  append: true
