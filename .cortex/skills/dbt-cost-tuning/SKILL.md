@@ -48,7 +48,7 @@ and the expected savings against the effort.
    | `ACCOUNT_USAGE.QUERY_HISTORY` | latest timestamp / error | Spill and pruning (R2, R3); history > 7 days |
    | `QUERY_ATTRIBUTION_HISTORY` | latest timestamp / NULL / error | `attributed` credits |
    | `ACCESS_HISTORY` | latest timestamp / error | R4 (unused models), R2 downstream reads |
-   | History depth | earliest `QUERY_HISTORY` timestamp | R4 false-positive guard (< 30 days) |
+   | History depth | earliest `QUERY_HISTORY` timestamp in the last 31 days | R4 false-positive guard (< 30 days) |
 
 4. **Checkpoint (ask the user):** show the project, analysis window (default: last 5 successful runs), capability
    matrix, and which rules will be evaluated. Ask for the run frequency (e.g. "daily") to project monthly savings;

@@ -33,8 +33,11 @@ WHERE start_time >= DATEADD(day, -2, CURRENT_TIMESTAMP());                -- QAH
 SELECT MAX(query_start_time) FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY
 WHERE query_start_time >= DATEADD(day, -1, CURRENT_TIMESTAMP());          -- ACCESS_HISTORY (Enterprise+)
 
-SELECT MIN(start_time) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY;        -- history depth (for R4 guard)
+SELECT MIN(start_time) FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE start_time >= DATEADD(day, -31, CURRENT_TIMESTAMP());               -- history depth (for R4 guard)
 ```
+The history-depth probe only needs to answer "is there at least 30 days of history?", so it looks back 31 days
+and no further. A result 30 or more days ago means the R4 guard is satisfied. Report the depth as "≥ 30 days", not as the true earliest date.
 
 To find dbt projects:
 ```sql
