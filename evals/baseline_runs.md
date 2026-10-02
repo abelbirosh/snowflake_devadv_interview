@@ -39,12 +39,16 @@ No queries spilled to remote storage. `orders` scanned 100% of its source partit
 
 | Rule | Expected | Basis |
 |---|---|---|
-| R1 Incremental | **Fires on `orders`** (top priority) | Full-rebuild table, 694M rows, 15.7 GB, ~80% of credits, `order_ts` event column |
-| R6 Test cost | **Fires** on the `ORDER_DETAIL` relationships test | ~5% of run-1 credits, 674M-row table, full-scan test type |
+| R1 Incremental | **Fires on `orders`** (top priority), Signal 80, without claiming `order_detail_id` is unique | Full-rebuild table, 694M rows, 15.7 GB, ~80% of credits, `order_ts` event column. Unique-key evidence scores 0: see fan-out below |
+| Data quality | **Join fan-out in `orders` reported** | `orders` writes 693,681,576 rows from 673,655,465 `ORDER_DETAIL` rows (20.0M duplicate `order_detail_id`), because `RAW_POS_FRANCHISE` has 335 rows for 325 `franchise_id`s. Verified 2026-10-02 |
+| R6 Test cost | **Fires** on the `ORDER_DETAIL` relationships test | 0.00609 credits/run after zero-scan costing = 5.2% of 0.1171 (2.7% if cache hits are averaged in as 0, which is the TC01 run-1 bug), 674M-row table, full-scan test type |
 | R3 Spill | Observed, below threshold (Signal 50) | > 1 GB local spill in 2 of 2 runs, no remote spill |
-| R4 Unused | Needs owner review | ~1 day of account history and a dev target, so the 30-day guard caps it |
-| R2 Cluster key | Doesn't fire | No outside reads of `orders` |
-| R5 Heavy view | Doesn't fire | Staging views only select and rename; near-zero cost |
+| R4 Unused | Under "Needs owner review" (not "Not evaluable") | ~1 day of account history and a dev target, so the 30-day guard caps it |
+| R2 Cluster key | Doesn't fire; on the "Evaluated, didn't fire" line | No outside reads of `orders` |
+| R5 Heavy view | Doesn't fire; on the "Evaluated, didn't fire" line | Staging views only select and rename; near-zero cost |
+
+Cost basis (new Q3, verified on these runs): 63 nodes incl. 50 tests; raw 0.1133 credits/run, 0.1171 after zero-scan costing,
+0.1161 after also dropping the Python write query's credits. `orders` ≈ 81%.
 
 ## Findings that changed the skill
 

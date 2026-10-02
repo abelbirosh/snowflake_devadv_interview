@@ -50,9 +50,10 @@ and the expected savings against the effort.
    | `ACCESS_HISTORY` | latest timestamp / error | R4 (unused models), R2 downstream reads |
    | History depth | earliest `QUERY_HISTORY` timestamp in the last 31 days | R4 false-positive guard (< 30 days) |
 
-4. **Checkpoint (ask the user):** show the project, analysis window (default: last 5 successful runs), capability
-   matrix, and which rules will be evaluated. Ask for the run frequency (e.g. "daily") to project monthly savings;
-   if they skip it, report per run. Wait for confirmation before continuing.
+4. **Checkpoint: stop and ask.** Show the project, analysis window (default: last 5 successful runs), capability
+   matrix, and which rules will be evaluated. Ask for the run frequency (e.g. "daily") to project monthly savings,
+   unless the user already gave it. **End your turn here.** Don't run Q1 or any later query until the user replies,
+   even when there's only one project. If they skip the frequency, report per run.
 
 ## Phase 1: Run discovery and artifacts
 
@@ -71,10 +72,15 @@ and the expected savings against the effort.
    run **Q3b** for them and label those metrics `estimated`. Pruning and spill aren't available for those runs.
 2. Apply the rubric's attribution rules (§2). In particular:
    - The parent `EXECUTE DBT PROJECT` query is excluded (Q3 does this). Report it separately only when its credits are `attributed`.
-   - Link `unattributed:<table>` rows to Python models via `relation_name`, for **metrics only, not credits**.
-   - Zero-scan executions: cost the model by its most recent execution that scanned data.
+   - **Python models:** an `unattributed:<table>` row whose table matches a Python model's `relation_name` is that
+     model's write query. Put its rows, bytes and spill on the model's row, and **drop its credits** (they're already
+     inside the outer node query). Don't list it as unattributed.
+   - **Zero-scan executions:** Q3 already costs a zero-scan run at the node's most recent scanning run
+     (`credits_per_run`, `zero_scan_runs`). Use those figures for every share and threshold, including R6's.
+     Never average cache hits in as zero.
 3. Produce the **cost table**: node, credits per run, share of total, source label, average seconds, rows written.
-   Sum shares only over attributed nodes. Report the unattributed remainder as one line, and don't hide it.
+   Shares are of the sum of `credits_per_run` after the two adjustments above. Report any remaining unattributed
+   credits as one line, and don't hide it. Mark nodes with `zero_scan_runs > 0` as "(cache in N runs)".
 
 ## Phase 3: Evaluate rules
 
@@ -83,7 +89,7 @@ Compute Signal, Impact, Effort and Priority with §3. Gather evidence as follows
 
 | Rule | Evidence source |
 |---|---|
-| R1 Incremental | Manifest materialization; Q5 row count and bytes; compiled SQL (timestamp/ID columns, full-history aggregations); source `unique` tests |
+| R1 Incremental | Manifest materialization; Q5 row count and bytes; compiled SQL (timestamp/ID columns, full-history aggregations); source `unique` tests; **Q6 key check** |
 | R2 Cluster key | Q4 reads with `avg_scan_ratio`; Q5 size; filter/join columns in those reads' SQL; `SYSTEM$CLUSTERING_INFORMATION` for the candidate column |
 | R3 Spill | Q3 `max_spill_*`, `runs_with_spill` |
 | R4 Unused | Q4 (no row means no outside reads); manifest `child_map`, exposures; history-depth guard |
@@ -93,8 +99,21 @@ Compute Signal, Impact, Effort and Priority with §3. Gather evidence as follows
 Rules:
 - A rule is reported **only if it fires** (gates pass and Signal ≥ 60). Near misses (Signal 40–59) go in an "Observed, below threshold" list with the evidence that's missing.
 - A rule whose data source is unavailable is reported as **not evaluable**, never as passed or failed.
-- For R1, write the concrete change: `materialized='incremental'`, the proposed `unique_key`, the
-  `is_incremental()` filter on the event column, and `incremental_strategy` (default `merge`; use `append` only if the source is append-only).
+  "Not evaluable" means *missing data or privileges only*. A rule that was evaluated and didn't fire is not
+  "not evaluable": list it on the one "Evaluated, didn't fire" line.
+- R4 candidates held back by the history-depth or dev-target guard go under **"Needs owner review"**, not "Not evaluable".
+- **Never claim a key is unique without Q6.** Before proposing a `unique_key`, run Q6 on the built model. Also
+  compare the model's rows written with the row count of its grain table (the source whose key you propose).
+  - Unique: the R1 unique-key evidence counts.
+  - Not unique, or the model writes more rows than its grain table: the model has **join fan-out**. The unique-key
+    evidence scores 0. Run Q6 on each joined dimension's join key to find the duplicated one, and report it as a
+    finding (it inflates rows, cost and any sums downstream). Don't propose that key with `merge`. Propose fixing
+    the duplicate first, or `incremental_strategy='delete+insert'` on a coarser key that is unique per batch (e.g. the header ID).
+- For R1, write the concrete change against the model's real file (`original_file_path` from the manifest):
+  `materialized='incremental'`, the verified `unique_key`, the `incremental_strategy` (default `merge`; `append` only
+  if the source is append-only), and an `is_incremental()` filter on the event column with a lookback, so
+  late-arriving rows are merged rather than dropped:
+  `WHERE <event_col> > (SELECT DATEADD(day, -3, MAX(<event_col>)) FROM {{ this }})`.
   Remind the user that the first deploy needs `--full-refresh`.
 
 ## Phase 4: Tuning plan
@@ -113,10 +132,17 @@ Window: <N> successful runs, <first> → <last> · Credit source: <attributed | 
 | # | Model | Rule | Quadrant | Impact | Signal | Effort | Est. saving/run (and /month) |
 For each: 2–4 lines of evidence → the proposed change (config/SQL diff) → how to verify it (query/metric to compare after).
 
+## Data-quality findings
+(only if found, e.g. join fan-out: model rows vs grain rows, the duplicated key)
 ## Observed, below threshold
+## Needs owner review
+(R4 under the history/dev guard: "no readers observed in N days")
 ## Not evaluable (and how to enable)
+(only rules whose view, privilege or history is missing)
 ## Assumptions
-(savings factors used, the estimated-credit concurrency caveat, history depth, dev vs prod target)
+(savings factors used, the estimated-credit concurrency caveat, zero-scan costing, history depth, dev vs prod target)
+
+Evaluated, didn't fire: <rule — one-phrase reason, ...>
 ```
 
 End by offering to (a) write the proposed changes as a local diff for review, or (b) re-run this analysis after
