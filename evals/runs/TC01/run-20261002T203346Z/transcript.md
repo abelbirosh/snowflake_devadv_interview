@@ -46,7 +46,7 @@
 │ Here's the environment snapshot before I dive in:
 │ 
 │ **Project:** `TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT`
-│ **Role:** ACCOUNTADMIN | **Warehouse:** TASTY_BYTES_DBT_WH | **Account:** BZ52393
+│ **Role:** ACCOUNTADMIN | **Warehouse:** TASTY_BYTES_DBT_WH | **Account:** <REDACTED>
 │ 
 │ | Capability | Status | Enables |
 │ |---|---|---|
