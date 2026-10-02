@@ -73,6 +73,20 @@
       "pass": true
     }
   ],
-  "manual": {},
-  "verdict": null
+  "manual": {
+    "Skill loaded (transcript shows dbt-cost-tuning / SKILL.md read)": true,
+    "Phase 0 checkpoint shown and agent waited before Q1\u2013Q5": false,
+    "Window = 2 successful runs; says R3 recurrence evidence is limited / only 2 runs": true,
+    "orders is ~80% of credits and ranked #1": true,
+    "R1 on orders is recommendation #1 with a concrete config diff on order_ts": true,
+    "R6 fires on the ORDER_DETAIL relationships test": false,
+    "R3 listed under 'Observed, below threshold' (Signal ~50)": true,
+    "R4 under 'Needs owner review' (30-day / dev guard), not recommended": false,
+    "R2 and R5 do not fire": true,
+    "Parent EXECUTE DBT PROJECT excluded from totals": true,
+    "Credit source label has a one-line reason": true,
+    "No hallucinated models, columns or numbers (spot-check 3 figures against baseline_runs.md)": false
+  },
+  "verdict": "Partial",
+  "override_reason": "- R6 missed (zero-scan costing not applied), unverified unique_key (order_detail_id is not unique), checkpoint not honoured, section misuse"
 }
