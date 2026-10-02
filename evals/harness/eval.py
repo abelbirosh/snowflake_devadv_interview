@@ -222,9 +222,15 @@ def cortex_telemetry(session, transcript_json):
         t["user_turns"] = sum(1 for m in msgs if m.get("role") == "user"
                               and any(c.get("is_user_prompt") for c in m.get("content", [])))
         t["assistant_messages"] = sum(1 for m in msgs if m.get("role") == "assistant")
-    # Shape of tool calls / token usage isn't documented, so count whatever is present.
-    t["tool_calls"] = sum(count_keys(transcript_json, lambda k, v: k == "type" and isinstance(v, str)
-                                     and "tool_use" in v).values()) if transcript_json else None
+        tools = [c["tool_use"] for m in msgs for c in m.get("content", []) if c.get("type") == "tool_use"]
+        t["tool_calls"] = len(tools)
+        t["tool_calls_by_name"] = {}
+        for tu in tools:
+            t["tool_calls_by_name"][tu.get("name")] = t["tool_calls_by_name"].get(tu.get("name"), 0) + 1
+        t["skills_invoked"] = [tu.get("input", {}).get("command") for tu in tools if tu.get("name") == "skill"]
+        t["bash_commands"] = [str(tu.get("input", {}).get("command", ""))[:300] for tu in tools if tu.get("name") == "bash"]
+        t["thinking_blocks"] = sum(1 for m in msgs for c in m.get("content", []) if c.get("type") == "thinking")
+    # Token usage isn't in the documented shape, so sum any token-like counters present.
     t["token_usage"] = count_keys(transcript_json, lambda k, v: "token" in k.lower()
                                   and isinstance(v, (int, float))) if transcript_json else {}
     return t
@@ -267,9 +273,10 @@ def snowflake_telemetry(start, end):
     return summary, rows, violations, failed, unbounded
 
 
-def auto_grade(case, text, sf):
+def auto_grade(case, text, sf, cx=None):
     c = CASES[case]
-    checks = []
+    checks = [{"check": "skill_invoked (dbt-cost-tuning)",
+               "pass": "dbt-cost-tuning" in ((cx or {}).get("skills_invoked") or [])}]
     for name, rx in c.get("auto", {}).items():
         checks.append({"check": name, "pass": bool(re.search(rx, text, re.I | re.M))})
     for name, rx in c.get("absent", {}).items():
@@ -325,8 +332,8 @@ def cmd_finish(args):
         sid = session["session_id"]
         pretty = sh(["cortex", "conversations", "transcript", sid], check=False)
         raw = sh(["cortex", "conversations", "transcript", sid, "-o", "json"], check=False)
-        try:
-            tjson = json.loads(raw)
+        try:  # the export is JSON Lines: one message per line
+            tjson = [json.loads(l) for l in raw.splitlines() if l.strip()]
         except json.JSONDecodeError:
             tjson = None
         write(os.path.join(run_dir, "transcript.md"), "```text\n" + redact(pretty) + "\n```\n")
@@ -344,7 +351,7 @@ def cmd_finish(args):
     write(os.path.join(run_dir, "telemetry.json"), redact_obj(telemetry))
     write(os.path.join(run_dir, "queries.json"), redact_obj(rows))
 
-    auto = auto_grade(meta["case"], agent_text(pretty), sf_summary)
+    auto = auto_grade(meta["case"], agent_text(pretty), sf_summary, telemetry["cortex"])
     grading = {"auto": auto, "manual": {}, "verdict": None}
     write(os.path.join(run_dir, "grading.json"), grading)
     write(os.path.join(run_dir, "grading.md"), grading_md(meta, auto))
