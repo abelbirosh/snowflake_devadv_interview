@@ -45,6 +45,8 @@ table above and lower confidence on the estimate instead of guessing a multiplie
   - Credits: for `estimated`, use the outer node query only. For `attributed`, add the outer query's credits to its children's (`QUERY_ATTRIBUTION_HISTORY.parent_query_id`). Never add the uncommented write query's estimate on top, because that double-counts.
   - Metrics (rows, bytes, spill): link the uncommented `CREATE_TABLE_AS_SELECT`/`INSERT`/`MERGE` to the model by matching its target table against `relation_name` in `manifest.json`.
 - **Zero-scan executions:** a `SELECT` with `bytes_scanned = 0` was answered either from the result cache (same query, unchanged data) or from table metadata (e.g. a `not_null` check on a column whose statistics prove it). Label it `zero-scan`. For cost, use the most recent execution that did scan data, and say so: in production, data changes between runs, so the result cache usually won't apply.
+  Apply this **per node and per run, before computing any share or threshold** (Q3 does it). A node that never scanned in the window keeps its actual (near-zero) cost.
+  Verified failure mode: averaging the Tasty Bytes cache hits in as zero put the `ORDER_DETAIL` relationships test at 2.7% instead of ~5%, so R6 wrongly missed.
 - **Ignore session setup** (`USE ...`, `SELECT CURRENT_*()`, `SHOW ...`). These are hundreds of near-zero queries per run, and including them only adds noise.
 
 Verified on the Tasty Bytes builds: the parent CALL made up about 47% of the raw estimated credits; the Python model's write query had no comment; and the second build's tests all came from cache. The first `relationships` test on `order_detail` took 11.3s and scanned 5.2 GB; in the second build it took 0.2s and scanned 0 bytes.
@@ -122,10 +124,14 @@ Gate: `materialized = table` (full rebuild every run).
 |---|---|
 | Model is large: ≥ 10M rows or ≥ 1 GB | 30 |
 | Model reads a monotonic event timestamp or ID column (e.g. `*_ts`, `*_at`, increasing ID) | 30 |
-| A unique key is available (source `unique` test, or a primary-key-like column) | 20 |
+| A unique key is **verified** on the built model (Q6: `COUNT(*) = COUNT(DISTINCT key)`, and rows written ≤ grain-table rows) | 20 |
 | SQL can be processed incrementally (no full-history window functions or aggregations without a partition key) | 20 |
 
 Savings factor: **0.8**, assuming most data is unchanged between runs. Effort defaults: scope 3, risk 3.
+
+Fan-out check: if the model writes more rows than its grain table, or Q6 finds duplicate keys, report it under
+"Data-quality findings" with the duplicated join key. Verified on Tasty Bytes: `orders` wrote 693,681,576 rows from
+673,655,465 `order_detail` rows because `raw_pos_franchise` has 335 rows for 325 `franchise_id`s.
 
 ### R2: Add a cluster key
 Gate: table is ≥ 1 GB.
@@ -182,7 +188,7 @@ Gate: the node is a test.
 
 | Evidence | Weight |
 |---|---|
-| Tests use ≥ 5% of the run's credits | 40 |
+| This test uses ≥ 5% of the run's dbt credits, after zero-scan costing (§2) | 40 |
 | The test scans a table with ≥ 100M rows | 30 |
 | Test type needs a full scan (`unique`, `relationships`) | 30 |
 
@@ -194,4 +200,5 @@ Savings factor: **0.7**, from a `where` filter on recent data or running the tes
 
 - Credit source label per model, plus a one-line explanation of the source mix.
 - Signal, Impact and Effort for every fired rule, and which pieces of evidence counted.
-- Rules that could not be evaluated (missing privilege, view, or history) and what's needed to enable them.
+- Rules that could not be evaluated (missing privilege, view, or history) and what's needed to enable them. Rules that were evaluated and didn't fire go on one "Evaluated, didn't fire" line instead.
+- Any `unique_key` in a proposed diff has been verified with Q6. Any join fan-out found is reported under "Data-quality findings".

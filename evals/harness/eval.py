@@ -70,7 +70,7 @@ def secrets():
     return sorted(vals, key=len, reverse=True)
 
 
-SECRETS = secrets()
+SECRETS = secrets()  # extended per session by add_session_secrets()
 
 
 def redact(text):
@@ -79,8 +79,31 @@ def redact(text):
     for s in SECRETS:
         text = re.sub(re.escape(s), "<REDACTED>", text, flags=re.I)
     text = re.sub(r"[A-Za-z0-9_.-]+\.snowflakecomputing\.com", "<REDACTED_HOST>", text)
+    text = re.sub(r"(Account(?:\*\*)?\s*:\s*(?:\*\*)?\s*)([A-Za-z0-9][A-Za-z0-9_.-]{4,})", r"\1<REDACTED>", text, flags=re.I)
     text = re.sub(r"[\w.+-]+@[\w-]+\.[\w.-]+", "<REDACTED_EMAIL>", text)
     return text
+
+
+def add_session_secrets(session):
+    """Account locators and hosts Cortex resolved at runtime (not always in connections.toml)."""
+    extra = list((session or {}).get("session_accounts") or [])
+    host = ((session or {}).get("thread") or {}).get("accountHost")
+    if host:
+        extra += [host, host.split(".")[0]]
+    for v in extra:
+        if isinstance(v, str) and len(v) > 2 and v not in SECRETS:
+            SECRETS.append(v)
+    SECRETS.sort(key=len, reverse=True)
+
+
+def public_transcript(lines):
+    """Drop Cortex's internal system reminders (they include the user's private instructions)."""
+    out = []
+    for m in lines:
+        content = [c for c in m.get("content", []) if not c.get("internalOnly")]
+        if content:
+            out.append({**m, "content": content})
+    return out
 
 
 def redact_obj(o):
@@ -313,8 +336,13 @@ FINDINGS_TEMPLATE = """# Findings: {case} {run_id}
 
 
 def cmd_finish(args):
-    run_dir, meta = current_run()
-    ended = now()
+    if args.rerun:  # re-process a finished run (e.g. after a harness fix); keeps its original time window
+        run_dir = os.path.join(ROOT, args.rerun)
+        meta = json.load(open(os.path.join(run_dir, "meta.json")))
+        ended = dt.datetime.fromisoformat(json.load(open(os.path.join(run_dir, "telemetry.json")))["ended_at"])
+    else:
+        run_dir, meta = current_run()
+        ended = now()
     started = dt.datetime.fromisoformat(meta["started_at"])
     rel = os.path.relpath(run_dir, ROOT)
 
@@ -332,13 +360,17 @@ def cmd_finish(args):
         sid = session["session_id"]
         pretty = sh(["cortex", "conversations", "transcript", sid], check=False)
         raw = sh(["cortex", "conversations", "transcript", sid, "-o", "json"], check=False)
-        try:  # the export is JSON Lines: one message per line
-            tjson = [json.loads(l) for l in raw.splitlines() if l.strip()]
-        except json.JSONDecodeError:
-            tjson = None
+        add_session_secrets(session)
+        tjson, bad = [], 0
+        for l in raw.splitlines():  # JSON Lines; a message with raw newlines can break a line
+            if l.strip():
+                try:
+                    tjson.append(json.loads(l))
+                except json.JSONDecodeError:
+                    bad += 1
         write(os.path.join(run_dir, "transcript.md"), "```text\n" + redact(pretty) + "\n```\n")
-        if tjson is not None:
-            write(os.path.join(run_dir, "transcript.json"), redact_obj(tjson))
+        write(os.path.join(run_dir, "transcript.json"),
+              {"unparsed_lines": bad, "messages": redact_obj(public_transcript(tjson))})
 
     sf_summary, rows, violations, failed, unbounded = snowflake_telemetry(started, ended)
     telemetry = {
@@ -358,7 +390,8 @@ def cmd_finish(args):
     fpath = os.path.join(run_dir, "findings.md")
     if not os.path.exists(fpath):
         write(fpath, FINDINGS_TEMPLATE.format(**meta))
-    os.remove(CURRENT)
+    if not args.rerun:
+        os.remove(CURRENT)
 
     passed = sum(a["pass"] for a in auto)
     print(f"Telemetry: {sf_summary['queries']} Snowflake queries, {sf_summary['failed_queries']} failed, "
@@ -458,6 +491,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("start"); s.add_argument("case"); s.add_argument("--force", action="store_true")
     f = sub.add_parser("finish"); f.add_argument("--session", help="Cortex session id, if auto-detect picks the wrong one")
+    f.add_argument("--rerun", metavar="RUN_DIR", help="re-process an already finished run, e.g. evals/runs/TC01/run-...")
     p = sub.add_parser("publish"); p.add_argument("run_dir", nargs="?", help="evals/runs/<CASE>/<run> (default: latest)")
     sub.add_parser("summary")
     a = ap.parse_args()

@@ -9,6 +9,7 @@ Every query here is read-only. Replace the placeholders with values found in Pha
 | `<PROJECT>` | dbt project object name (UPPERCASE) | `TASTY_BYTES_DBT` |
 | `<N_RUNS>` | Successful runs to analyze | `5` |
 | `<DAYS>` | Look-back window for reads | `30` |
+| `<MODEL_RELATION>` / `<KEY>` | A model's `relation_name` and the key to check (Q6) | `TASTY_BYTES_DBT_DB.DEV.ORDERS` / `ORDER_DETAIL_ID` |
 
 Always bound `ACCOUNT_USAGE` queries by time. The views are large, and unbounded scans cost credits.
 
@@ -87,7 +88,7 @@ run_ctx AS (                                   -- who ran it, so we only pick up
   WHERE h.start_time >= (SELECT MIN(run_start) FROM runs) - INTERVAL '1 minute'
 ),
 q AS (
-  SELECT c.run_id, h.query_id, h.query_type, h.warehouse_size, h.execution_time, h.total_elapsed_time,
+  SELECT c.run_id, c.run_start, h.query_id, h.query_type, h.warehouse_size, h.execution_time, h.total_elapsed_time,
          h.bytes_scanned, h.rows_inserted, h.partitions_scanned, h.partitions_total,
          h.bytes_spilled_to_local_storage AS spill_local, h.bytes_spilled_to_remote_storage AS spill_remote,
          REGEXP_SUBSTR(h.query_text, '"node_id": "([^"]+)"', 1, 1, 'e') AS node_id,
@@ -101,30 +102,55 @@ q AS (
     AND h.query_id <> c.run_id                  -- exclude the parent EXECUTE DBT PROJECT
     AND h.query_type NOT IN ('USE','SHOW','DESCRIBE')
     AND h.query_text NOT ILIKE 'SELECT CURRENT\\_%'
+),
+qc AS (                                       -- per-query credits (rubric §1)
+  SELECT q.*,
+         COALESCE(q.node_id, 'unattributed:' || COALESCE(q.target_relation, q.query_type)) AS node,
+         COALESCE(a.credits_attributed_compute + COALESCE(a.credits_used_query_acceleration, 0),
+                  q.execution_time / 3600000 *
+                  DECODE(q.warehouse_size,'X-Small',1,'Small',2,'Medium',4,'Large',8,'X-Large',16,
+                         '2X-Large',32,'3X-Large',64,'4X-Large',128,'5X-Large',256,'6X-Large',512),
+                  0) AS credits,                -- result-cache hits use no warehouse (size NULL): 0, not NULL
+         IFF(a.query_id IS NULL, 0, 1) AS is_attributed
+  FROM q
+  LEFT JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_ATTRIBUTION_HISTORY a
+    ON a.query_id = q.query_id AND a.start_time >= (SELECT MIN(run_start) FROM runs)
+),
+node_run AS (                                 -- one row per node per run
+  SELECT node, run_id, MAX(run_start) AS run_start, SUM(credits) AS credits, SUM(bytes_scanned) AS bytes_scanned
+  FROM qc GROUP BY 1, 2
+),
+last_scan AS (                                -- rubric §2 zero-scan rule: the most recent run that scanned data
+  SELECT node, MAX_BY(credits, run_start) AS credits
+  FROM node_run WHERE bytes_scanned > 0 GROUP BY 1
+),
+node_cost AS (
+  SELECT nr.node,
+         ROUND(AVG(IFF(nr.bytes_scanned = 0, COALESCE(ls.credits, nr.credits), nr.credits)), 5) AS credits_per_run,
+         ROUND(AVG(nr.credits), 5)                                                     AS raw_credits_per_run,
+         COUNT_IF(nr.bytes_scanned = 0 AND ls.credits IS NOT NULL)                     AS zero_scan_runs
+  FROM node_run nr LEFT JOIN last_scan ls ON ls.node = nr.node
+  GROUP BY 1
 )
-SELECT COALESCE(q.node_id, 'unattributed:' || COALESCE(q.target_relation, q.query_type)) AS node,
-       COUNT(DISTINCT q.run_id) AS runs,
-       COUNT(*) AS queries,
-       ROUND(SUM(COALESCE(
-               a.credits_attributed_compute + COALESCE(a.credits_used_query_acceleration, 0),
-               q.execution_time / 3600000 *
-               DECODE(q.warehouse_size,'X-Small',1,'Small',2,'Medium',4,'Large',8,'X-Large',16,
-                      '2X-Large',32,'3X-Large',64,'4X-Large',128,'5X-Large',256,'6X-Large',512)))
-             / COUNT(DISTINCT q.run_id), 5)                      AS credits_per_run,
-       ROUND(100 * COUNT(a.query_id) / COUNT(*))                AS pct_attributed,   -- source label
-       ROUND(AVG(q.total_elapsed_time) / 1000, 1)               AS avg_secs,
-       SUM(IFF(q.query_type = 'SELECT' AND q.bytes_scanned = 0, 1, 0)) AS zero_scan_execs,
-       ROUND(MAX(q.partitions_scanned / NULLIF(q.partitions_total, 0)), 2) AS max_scan_ratio,
-       ROUND(MAX(q.spill_local)  / 1e9, 2)                      AS max_spill_local_gb,
-       ROUND(MAX(q.spill_remote) / 1e9, 2)                      AS max_spill_remote_gb,
-       COUNT(DISTINCT IFF(q.spill_local > 0 OR q.spill_remote > 0, q.run_id, NULL)) AS runs_with_spill,
-       MAX(q.rows_inserted)                                     AS rows_written
-FROM q
-LEFT JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_ATTRIBUTION_HISTORY a
-  ON a.query_id = q.query_id AND a.start_time >= (SELECT MIN(run_start) FROM runs)
-GROUP BY 1
-ORDER BY credits_per_run DESC NULLS LAST;
+SELECT qc.node,
+       COUNT(DISTINCT qc.run_id)                                 AS runs,
+       COUNT(*)                                                  AS queries,
+       nc.credits_per_run,                                       -- use this for shares and thresholds
+       nc.raw_credits_per_run,                                   -- as observed, cache hits included
+       nc.zero_scan_runs,
+       ROUND(100 * SUM(qc.is_attributed) / COUNT(*))             AS pct_attributed,   -- source label
+       ROUND(AVG(qc.total_elapsed_time) / 1000, 1)               AS avg_secs,
+       ROUND(MAX(qc.partitions_scanned / NULLIF(qc.partitions_total, 0)), 2) AS max_scan_ratio,
+       ROUND(MAX(qc.spill_local)  / 1e9, 2)                      AS max_spill_local_gb,
+       ROUND(MAX(qc.spill_remote) / 1e9, 2)                      AS max_spill_remote_gb,
+       COUNT(DISTINCT IFF(qc.spill_local > 0 OR qc.spill_remote > 0, qc.run_id, NULL)) AS runs_with_spill,
+       MAX(qc.rows_inserted)                                     AS rows_written
+FROM qc JOIN node_cost nc ON nc.node = qc.node
+GROUP BY qc.node, nc.credits_per_run, nc.raw_credits_per_run, nc.zero_scan_runs
+ORDER BY nc.credits_per_run DESC NULLS LAST;
 ```
+Python-model write queries come back as `unattributed:<table>`. Match `<table>` to a Python model's `relation_name`,
+move the row's metrics to that model, and drop its credits (SKILL.md Phase 2).
 
 `pct_attributed` = 100 → `attributed`; 0 → `estimated`; anything in between → `mixed (N% attributed)`.
 
@@ -181,4 +207,18 @@ WHERE table_schema = '<MODEL_SCHEMA>' AND table_type = 'BASE TABLE';
 For a clustering candidate column:
 ```sql
 SELECT SYSTEM$CLUSTERING_INFORMATION('<DB>.<MODEL_SCHEMA>.<TABLE>', '(<COLUMN>)');
+```
+
+## Q6: Key uniqueness and join fan-out (R1)
+
+Run this before proposing any `unique_key`. It's exact, so it scans one column of the model. Say so if the model is large.
+```sql
+SELECT COUNT(*) AS row_count, COUNT(DISTINCT <KEY>) AS distinct_keys
+FROM <MODEL_RELATION>;
+```
+Free first check: compare Q3 `rows_written` with the grain table's `row_count` from Q5 or `INFORMATION_SCHEMA.TABLES`.
+More rows than the grain table means fan-out. To find the source, run the same query on each joined dimension's
+join key; dimensions are small, so this is cheap:
+```sql
+SELECT COUNT(*) AS row_count, COUNT(DISTINCT <JOIN_KEY>) AS distinct_keys FROM <DIM_RELATION>;
 ```
