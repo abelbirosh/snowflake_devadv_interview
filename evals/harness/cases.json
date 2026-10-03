@@ -149,7 +149,8 @@
       "type": "failure",
       "connection": "AG26866",
       "prompts": [
-        "Give me a dbt tuning plan for TASTY_BYTES_DBT_FAIL."
+        "Give me a dbt tuning plan for TASTY_BYTES_DBT_FAIL.",
+        "Yes, that project. Skip frequency, show per run."
       ],
       "auto": {
         "shows_error": "error"
