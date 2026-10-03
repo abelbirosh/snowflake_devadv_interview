@@ -5,7 +5,7 @@
 -- =============================================================================
 
 USE ROLE ACCOUNTADMIN;
-SET me = CURRENT_USER();
+SET me = '"' || CURRENT_USER() || '"';   -- quoted: user names can be case-sensitive (IDENTIFIER() upper-cases a bare name)
 
 -- -----------------------------------------------------------------------------
 -- TC05: DBT_TUNING_EVAL_RESTRICTED

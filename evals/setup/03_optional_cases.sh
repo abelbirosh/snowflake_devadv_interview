@@ -14,8 +14,8 @@ case "$CASE" in
     # No warehouse in session. Unset your user's default warehouse (restore it in 99_teardown.sql),
     # then start Cortex Code with a connection entry that has no `warehouse = ...` line
     # (see RUNBOOK.md, "Connections").
-    snow sql -c "$CONN" -q 'SET me = CURRENT_USER(); DESC USER IDENTIFIER($me);' | grep -i default_warehouse || true
-    snow sql -c "$CONN" -q 'SET me = CURRENT_USER(); ALTER USER IDENTIFIER($me) UNSET DEFAULT_WAREHOUSE;'
+    snow sql -c "$CONN" -q "SET me = '\"' || CURRENT_USER() || '\"'; DESC USER IDENTIFIER(\$me);" | grep -i default_warehouse || true
+    snow sql -c "$CONN" -q "SET me = '\"' || CURRENT_USER() || '\"'; ALTER USER IDENTIFIER(\$me) UNSET DEFAULT_WAREHOUSE;"
     ;;
   tc06)
     # ACCOUNT_USAGE / QUERY_ATTRIBUTION_HISTORY not caught up. Run a fresh build, then start the
