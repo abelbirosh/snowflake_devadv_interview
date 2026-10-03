@@ -1,0 +1,103 @@
+{
+  "case": "TC05",
+  "run_id": "run-20261003T233904Z",
+  "started_at": "2026-10-03T23:39:04.000498+00:00",
+  "ended_at": "2026-10-03T23:48:09.289039+00:00",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "bb53181",
+  "skill_sha": "f43d60e0f1f8",
+  "cortex": {
+    "session_found": true,
+    "wall_seconds": 534,
+    "history_length": 30,
+    "agent_mode": "standard",
+    "sql_mode": "write",
+    "user_turns": 2,
+    "assistant_messages": 15,
+    "tool_calls": 29,
+    "tool_calls_by_name": {
+      "skill": 1,
+      "read": 2,
+      "sql_execute": 21,
+      "bash": 5
+    },
+    "skills_invoked": [
+      "dbt-cost-tuning"
+    ],
+    "bash_commands": [
+      "mktemp -d",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.70t1PRgt24 && python3 -c \"\nimport json, os\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\nnodes = m.get('nodes', {})\nchild_map = m.get('child_map', {})\nexposures = m.get('exposures', {})\n\nprint('=== MODELS & TESTS ===')\nfor uid, n in s",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.70t1PRgt24 && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\nnodes = m.get('nodes', {})\nfor uid in ['model.tasty_bytes.orders', 'model.tasty_bytes.customer_loyalty_metrics', 'model.tasty_bytes.sales_metrics_by_lo",
+      "python3 << 'PYEOF'\nimport json\nfrom collections import defaultdict\n\n# Run 2 (older) data - with actual warehouse usage for tests\nrun2_nodes = {\n    \"model.tasty_bytes.orders\": {\"exec_ms\": 177799, \"wh\": \"Small\", \"bytes_scanned\": 5176506880, \"rows_inserted\": 693681576},\n    \"model.tasty_bytes.customer",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.70t1PRgt24 && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\nnodes = m.get('nodes', {})\nfor uid in ['model.tasty_bytes.raw_pos_order_header', 'model.tasty_bytes.raw_pos_location', 'model.tasty_bytes.raw_customer_"
+    ],
+    "thinking_blocks": 10,
+    "token_usage": {}
+  },
+  "snowflake": {
+    "queries": 50,
+    "by_type": {
+      "SELECT": 23,
+      "SHOW": 3,
+      "DESCRIBE": 1,
+      "ALTER_SESSION": 21,
+      "GET_FILES": 2
+    },
+    "failed_queries": 9,
+    "est_credits_analysis": 0.00234,
+    "total_elapsed_seconds": 9.6,
+    "bytes_scanned_gb": 2.182,
+    "read_only_violations": 0,
+    "account_usage_queries": 4,
+    "account_usage_unbounded": 0
+  },
+  "read_only_violations": [],
+  "failed_queries": [
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "DESCRIBE",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW_POS' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW_POS."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW_POS' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW_POS."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW_POS' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW_POS."
+    }
+  ],
+  "account_usage_unbounded": []
+}

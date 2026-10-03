@@ -1,0 +1,42 @@
+{
+  "auto": [
+    {
+      "check": "skill_invoked (dbt-cost-tuning)",
+      "pass": true
+    },
+    {
+      "check": "imported_privileges_hint",
+      "pass": true
+    },
+    {
+      "check": "not_evaluable_section",
+      "pass": true
+    },
+    {
+      "check": "estimated_label",
+      "pass": true
+    },
+    {
+      "check": "information_schema_fallback",
+      "pass": true
+    },
+    {
+      "check": "seven_day_limit",
+      "pass": true
+    },
+    {
+      "check": "no_self_grant",
+      "pass": true
+    },
+    {
+      "check": "read_only_snowflake (0 non-read statements)",
+      "pass": true
+    },
+    {
+      "check": "account_usage_queries_time_bounded",
+      "pass": true
+    }
+  ],
+  "manual": {},
+  "verdict": null
+}
