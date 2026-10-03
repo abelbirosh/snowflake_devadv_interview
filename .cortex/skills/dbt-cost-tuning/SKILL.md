@@ -12,7 +12,7 @@ and the expected savings against the effort.
 
 **References. Load these before Phase 2:**
 - `references/scoring-rubric.md`: credit sourcing, attribution, rule weights, thresholds and priority formula. **This is the source of truth for every number in the report.**
-- `references/queries.md`: SQL templates Q0–Q5.
+- `references/queries.md`: SQL templates Q0–Q6.
 
 ---
 
@@ -68,9 +68,33 @@ and the expected savings against the effort.
 
 ## Phase 2: Attribute cost to models
 
-1. Run **Q3** (ACCOUNT_USAGE path). If the most recent runs aren't in `ACCOUNT_USAGE` yet (~45 min delay),
-   run **Q3b** for them and label those metrics `estimated`. Pruning and spill aren't available for those runs.
-2. Apply the rubric's attribution rules (§2). In particular:
+1. Run **Q3a** (run coverage), then **Q3** (ACCOUNT_USAGE path). Q3 only sees runs whose parent query has reached
+   `ACCOUNT_USAGE` (~45 min delay) and drops the rest **silently**. So compare Q3's `runs_used` with the window size
+   from Q1 (`INFORMATION_SCHEMA`). No Q3 rows at all means `runs_used` = 0.
+   - **Equal:** continue.
+   - **Fewer:** run **Q3b** for each run that Q3a marks `in_account_usage = FALSE`. Label those metrics `estimated`,
+     and say which runs they are: "N of M runs from `INFORMATION_SCHEMA` (not yet in `ACCOUNT_USAGE`)".
+     Pruning and spill aren't available for those runs, so R2 and R3 are **not yet evaluable** for them. Score R2/R3
+     on the `ACCOUNT_USAGE` runs only and say so ("spills in ≥ 2 runs" counts those runs only), or, if there are none,
+     list R2 and R3 under "Not evaluable" with "re-run in ~45 min". Never score a missing run's spill or pruning as 0.
+2. **Check that queries carry dbt comments.** If no Q3 (or Q3b) row has a `node_id` (every node is `unattributed:*`),
+   the project doesn't write dbt's query comment, so **per-model attribution isn't possible**. Then:
+   - Say so plainly, and recommend adding this to `dbt_project.yml` (Snowflake strips leading comments, so the
+     comment must be appended):
+     ```yaml
+     query-comment:
+       append: true
+     ```
+   - Still report what is known: **total** credits per run, and the uncommented writes linked to a table by their
+     target (`unattributed:<table>`, matched to `relation_name`), labelled `table-linked`. A table-linked figure is that
+     one write query only, not the model's full cost (tests, hooks and Python wrappers are missing). Put everything
+     else on one `unattributed` line.
+   - **Never invent per-model credits or shares**: don't split totals across models, and don't infer a model from
+     query text. Rules that need per-model credits (R1, R3, R5, R6) go under "Not evaluable" with
+     "add `query-comment: {append: true}`, run one build, re-run this analysis". R2 and R4 evidence (Q4, Q5,
+     manifest) is still available: show it, but with no credit Impact.
+   - Some, but not all, queries unattributed: continue normally and report the unattributed share in the cost table.
+3. Apply the rubric's attribution rules (§2). In particular:
    - The parent `EXECUTE DBT PROJECT` query is excluded (Q3 does this). Report it separately only when its credits are `attributed`.
    - **Python models:** an `unattributed:<table>` row whose table matches a Python model's `relation_name` is that
      model's write query. Put its rows, bytes and spill on the model's row, and **drop its credits** (they're already
@@ -78,7 +102,7 @@ and the expected savings against the effort.
    - **Zero-scan executions:** Q3 already costs a zero-scan run at the node's most recent scanning run
      (`credits_per_run`, `zero_scan_runs`). Use those figures for every share and threshold, including R6's.
      Never average cache hits in as zero.
-3. Produce the **cost table**: node, credits per run, share of total, source label, average seconds, rows written.
+4. Produce the **cost table**: node, credits per run, share of total, source label, average seconds, rows written.
    Shares are of the sum of `credits_per_run` after the two adjustments above. Report any remaining unattributed
    credits as one line, and don't hide it. Mark nodes with `zero_scan_runs > 0` as "(cache in N runs)".
 
@@ -97,7 +121,14 @@ Compute Signal, Impact, Effort and Priority with §3. Gather evidence as follows
 | R6 Test cost | Q3 rows for `test.*` nodes; size of the tested table; test type |
 
 Rules:
-- A rule is reported **only if it fires** (gates pass and Signal ≥ 60). Near misses (Signal 40–59) go in an "Observed, below threshold" list with the evidence that's missing.
+- **Signal is a visible sum.** For every scored rule (fired or near miss), list each evidence row of that rule with
+  its weight and whether it counted, e.g. R2: `scan ≥ 80% (35 ✓) + same filter column (25 ✗) + ≥ 1,000 partitions (25 ✗) + moderate cardinality (15 ✗) = 35`.
+  A Signal must be a sum of the rule's own weights. If it isn't, recompute it.
+- Place each scored rule by its Signal:
+  - **≥ 60** (and gates pass): fires. Report it under Recommendations.
+  - **40–59**: "Observed, below threshold". Name each missing evidence row with its weight and the Signal it would
+    reach, e.g. "R3 Signal 50: remote spill (+50) would bring it to 100". Never say a fixed "would fire at 60".
+  - **< 40**, or a gate failed: the "Evaluated, didn't fire" line.
 - A rule whose data source is unavailable is reported as **not evaluable**, never as passed or failed.
   "Not evaluable" means *missing data or privileges only*. A rule that was evaluated and didn't fire is not
   "not evaluable": list it on the one "Evaluated, didn't fire" line.
@@ -109,6 +140,12 @@ Rules:
     evidence scores 0. Run Q6 on each joined dimension's join key to find the duplicated one, and report it as a
     finding (it inflates rows, cost and any sums downstream). Don't propose that key with `merge`. Propose fixing
     the duplicate first, or `incremental_strategy='delete+insert'` on a coarser key that is unique per batch (e.g. the header ID).
+  - **`delete+insert` key: run Q6 on it too**, on the built model, before proposing it. It doesn't need to be unique
+    per row, but it must have **0 nulls** in the model (a null key is never deleted, so those rows duplicate on every
+    run), and it must be unique in the table it comes from (Q6 on e.g. `ORDER_HEADER.order_id`), with the model's
+    distinct count ≤ that table's rows. Quote the null count and both distinct counts in the evidence. If a check
+    fails, don't propose the key.
+    The R1 unique-key evidence still scores 0, because the model's rows aren't unique.
 - For R1, write the concrete change against the model's real file (`original_file_path` from the manifest):
   `materialized='incremental'`, the verified `unique_key`, the `incremental_strategy` (default `merge`; `append` only
   if the source is append-only), and an `is_incremental()` filter on the event column with a lookback, so
@@ -122,27 +159,29 @@ Output exactly this structure, in Markdown:
 
 ```
 # dbt Tuning Plan: <DB>.<SCHEMA>.<PROJECT>
-Window: <N> successful runs, <first> → <last> · Credit source: <attributed | estimated | mixed (N%)> — <one-line reason>
+Window: <N> successful runs, <first> → <last> (<K> of them via Q3b, if any) · Credit source: <attributed | estimated | mixed (N%)> — <one-line reason>
 
 ## Where the cost is
 | Model | Credits/run | Share | Avg time | Source |
 (top 5 + "all other nodes" + "unattributed")
+(no dbt query comments: "Total" + `table-linked` writes by table + "unattributed" only, no per-model shares; Phase 2 step 2)
 
 ## Recommendations (ranked by Priority)
 | # | Model | Rule | Quadrant | Impact | Signal | Effort | Est. saving/run (and /month) |
-For each: 2–4 lines of evidence → the proposed change (config/SQL diff) → how to verify it (query/metric to compare after).
+For each: the evidence rows with their weights, summing to the Signal → the proposed change (config/SQL diff) → how to verify it (query/metric to compare after).
 
 ## Data-quality findings
 (only if found, e.g. join fan-out: model rows vs grain rows, the duplicated key)
 ## Observed, below threshold
+(Signal 40–59: the evidence sum, and each missing row with its weight)
 ## Needs owner review
 (R4 under the history/dev guard: "no readers observed in N days")
 ## Not evaluable (and how to enable)
-(only rules whose view, privilege or history is missing)
+(only rules whose view, privilege, history or query comment is missing, or "not yet evaluable" for runs still behind in ACCOUNT_USAGE)
 ## Assumptions
 (savings factors used, the estimated-credit concurrency caveat, zero-scan costing, history depth, dev vs prod target)
 
-Evaluated, didn't fire: <rule — one-phrase reason, ...>
+Evaluated, didn't fire: <rule — Signal or failed gate, one-phrase reason, ...>
 ```
 
 End by offering to (a) write the proposed changes as a local diff for review, or (b) re-run this analysis after
@@ -161,4 +200,6 @@ the changes are deployed, to measure actual savings. Do not apply anything witho
 | `ACCESS_HISTORY` unavailable | R4 not evaluable (needs Enterprise edition + access to the view) | Yes |
 | No successful runs | Show the last error; analysis needs at least one successful `build`/`run` | Stop |
 | Artifacts unavailable | Rules reading the manifest drop to lower confidence | Yes, reduced |
+| Recent runs not in `ACCOUNT_USAGE` yet (Q3 `runs_used` < Q1 window) | Name the runs. Use Q3b for them, label those credits `estimated`, and mark R2/R3 "not yet evaluable" for them (~45 min latency) | Yes, reduced |
+| No query carries a dbt `node_id` (query comment off or prepended) | Per-model attribution isn't possible. Add `query-comment: {append: true}` to `dbt_project.yml`, run one build, re-run. Meanwhile: total credits + `table-linked` writes + `unattributed`; never invented per-model credits | Yes, reduced |
 | User asks to apply a fix | Out of scope for this skill. Offer a local diff, and let them deploy it themselves | n/a |

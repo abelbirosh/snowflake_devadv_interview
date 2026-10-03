@@ -39,6 +39,10 @@ table above and lower confidence on the estimate instead of guessing a multiplie
 
 - Each dbt query ends with dbt's JSON comment, because `query-comment: append: true` is set. Extract the model with
   `REGEXP_SUBSTR(query_text, '"node_id": "([^"]+)"', 1, 1, 'e')`.
+- **No comments at all** (`query-comment: null`, or a prepended comment, which Snowflake strips): no query has a
+  `node_id`, so credits can't be attributed to models. Report total credits, `table-linked` writes (an uncommented
+  `CREATE_TABLE_AS_SELECT`/`INSERT`/`MERGE` matched to a `relation_name` by its target; that one query only) and
+  `unattributed`. Never split totals across models. The fix is `query-comment: {append: true}` in `dbt_project.yml`.
 - Group per `node_id` over the analysis window (default: the last 5 successful runs, or 7 days).
 - **Exclude the parent `EXECUTE DBT PROJECT` query** (`query_type = 'CALL'`). It runs for the whole build, so counting it would double-count every model's queries. With `estimated` credits, leave it out of all totals. With `attributed` credits, report it separately as dbt orchestration overhead.
 - **Python models:** the comment lands on the outer node query (a stored-procedure call), but the Snowpark query that actually writes the table (`CREATE ... TABLE <db>.<schema>.<model>`) has no comment. The outer query's time already includes that write query.
@@ -83,6 +87,15 @@ Priority = Impact × (Signal / 100) ÷ Effort
 
 A rule **fires** only if every gate passes and Signal ≥ **60**.
 
+Signal is the sum of the rule's evidence weights that counted (§4), so every Signal must be reachable from those
+weights. Show the sum in the report, row by row. Placement:
+
+| Signal | Section |
+|---|---|
+| ≥ 60, gates pass | Recommendations |
+| 40–59 | Observed, below threshold, naming each missing row and its weight (e.g. "remote spill +50 → 100") |
+| < 40, or a gate fails | "Evaluated, didn't fire" line |
+
 ### Impact
 
 ```
@@ -124,7 +137,7 @@ Gate: `materialized = table` (full rebuild every run).
 |---|---|
 | Model is large: ≥ 10M rows or ≥ 1 GB | 30 |
 | Model reads a monotonic event timestamp or ID column (e.g. `*_ts`, `*_at`, increasing ID) | 30 |
-| A unique key is **verified** on the built model (Q6: `COUNT(*) = COUNT(DISTINCT key)`, and rows written ≤ grain-table rows) | 20 |
+| A unique key is **verified** on the built model (Q6: `COUNT(*) = COUNT(DISTINCT key)`, 0 nulls, and rows written ≤ grain-table rows) | 20 |
 | SQL can be processed incrementally (no full-history window functions or aggregations without a partition key) | 20 |
 
 Savings factor: **0.8**, assuming most data is unchanged between runs. Effort defaults: scope 3, risk 3.
@@ -132,6 +145,10 @@ Savings factor: **0.8**, assuming most data is unchanged between runs. Effort de
 Fan-out check: if the model writes more rows than its grain table, or Q6 finds duplicate keys, report it under
 "Data-quality findings" with the duplicated join key. Verified on Tasty Bytes: `orders` wrote 693,681,576 rows from
 673,655,465 `order_detail` rows because `raw_pos_franchise` has 335 rows for 325 `franchise_id`s.
+
+`delete+insert` on a coarser key (e.g. `order_id`) is allowed under fan-out, but the key still goes through Q6: 0 nulls
+in the model, unique in its source table, model distinct count ≤ source rows. It doesn't earn the 20 points above,
+because the model's rows still aren't unique.
 
 ### R2: Add a cluster key
 Gate: table is ≥ 1 GB.
@@ -145,6 +162,9 @@ Gate: table is ≥ 1 GB.
 
 Savings factor: **0.3** of the downstream read credits, not the model's own build. Note that automatic clustering adds serverless cost. Effort defaults: scope 1, risk 1.
 
+Verified on Tasty Bytes: `ORDERS` has 464 micro-partitions (< 1,000) and one outside read, so R2 scores at most
+35 (scan ratio only), which puts it on the "Evaluated, didn't fire" line, not under "Observed, below threshold".
+
 ### R3: Fix spilling
 Gate: some spill observed.
 
@@ -155,6 +175,22 @@ Gate: some spill observed.
 | Local spill > 1 GB | 20 |
 
 Savings factor: **0.3**. Recommend refactoring first (filter earlier, pre-aggregate, simplify joins). A larger warehouse just for this model is the fallback. Effort defaults: scope 3, risk 2.
+
+A near miss names the weight that's missing, not a fixed threshold. Verified on Tasty Bytes: `orders` spills
+12.45 GB locally in both runs, so Signal = 30 + 20 = 50; "remote spill (+50) would bring it to 100".
+
+**Design note: why there's no warehouse-sizing rule.** A rule like "large local spill on a full rebuild → test one
+size up" was considered and left out, because R1 is the better fix for the same evidence:
+- The spill comes from rebuilding the whole table. R1 makes each run process a few days of rows instead of all
+  history, so the working set (and the spill) shrinks with it. Upsizing keeps the full rebuild and pays more for it.
+- One size up doubles the credit rate. It only breaks even if runtime halves, and local spill alone doesn't
+  predict that: local spill slows a query far less than remote spill, which R3 already weights at 50.
+- A dbt project usually shares one warehouse, so sizing up hits every model, not just the one that spills. A
+  per-model `snowflake_warehouse` config avoids that, but adds a warehouse to run and monitor.
+- The skill is read-only and never resizes, so it can't measure the trade-off. It would be guessing.
+So when R1 fires on a model that also spills, the plan says the spill should drop after the incremental change,
+and the verify step re-checks `max_spill_local_gb` on the next run. A bigger warehouse stays R3's last-resort
+fallback for a model that can't be made incremental.
 
 ### R4: Drop or disable an unused model
 Gate: `ACCESS_HISTORY` is available. If it isn't, report "cannot assess" instead of guessing.
@@ -201,4 +237,6 @@ Savings factor: **0.7**, from a `where` filter on recent data or running the tes
 - Credit source label per model, plus a one-line explanation of the source mix.
 - Signal, Impact and Effort for every fired rule, and which pieces of evidence counted.
 - Rules that could not be evaluated (missing privilege, view, or history) and what's needed to enable them. Rules that were evaluated and didn't fire go on one "Evaluated, didn't fire" line instead.
-- Any `unique_key` in a proposed diff has been verified with Q6. Any join fan-out found is reported under "Data-quality findings".
+- Any `unique_key` in a proposed diff has been verified with Q6, including a `delete+insert` key (nulls and distinct count). Any join fan-out found is reported under "Data-quality findings".
+- The runs actually used: if Q3 saw fewer runs than Q1 found, which ones came from Q3b (`estimated`, R2/R3 not yet evaluable).
+- If no query carries a `node_id`: say per-model attribution isn't possible, and give the `query-comment` fix.
