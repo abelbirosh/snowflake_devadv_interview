@@ -166,7 +166,8 @@
       "type": "edge",
       "connection": "AG26866",
       "prompts": [
-        "Give me a dbt tuning plan for TASTY_BYTES_DBT_NOCOMMENT."
+        "Give me a dbt tuning plan for TASTY_BYTES_DBT_NOCOMMENT.",
+        "Yes, that project. Skip frequency, show per run."
       ],
       "auto": {
         "names_query_comment_fix": "query[-_ ]comment",
