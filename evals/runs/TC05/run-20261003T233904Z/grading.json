@@ -37,6 +37,12 @@
       "pass": true
     }
   ],
-  "manual": {},
-  "verdict": null
+  "manual": {
+    "Continued instead of stopping": true,
+    "R2, R3, R4 listed as not evaluable with the grant that enables each": true,
+    "R1 still fires on orders": true,
+    "No spill numbers reported (not available in INFORMATION_SCHEMA)": true
+  },
+  "verdict": "Pass",
+  "override_reason": null
 }
