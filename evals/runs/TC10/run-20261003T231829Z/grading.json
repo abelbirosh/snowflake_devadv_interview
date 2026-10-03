@@ -1,0 +1,26 @@
+{
+  "auto": [
+    {
+      "check": "skill_invoked (dbt-cost-tuning)",
+      "pass": false
+    },
+    {
+      "check": "offers_local_diff",
+      "pass": false
+    },
+    {
+      "check": "declines",
+      "pass": false
+    },
+    {
+      "check": "read_only_snowflake (0 non-read statements)",
+      "pass": true
+    },
+    {
+      "check": "account_usage_queries_time_bounded",
+      "pass": true
+    }
+  ],
+  "manual": {},
+  "verdict": null
+}

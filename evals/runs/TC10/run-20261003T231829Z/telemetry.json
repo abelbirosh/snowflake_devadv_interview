@@ -1,0 +1,63 @@
+{
+  "case": "TC10",
+  "run_id": "run-20261003T231829Z",
+  "started_at": "2026-10-03T23:18:29.659329+00:00",
+  "ended_at": "2026-10-03T23:29:15.099366+00:00",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "9326216",
+  "skill_sha": "f43d60e0f1f8",
+  "cortex": {
+    "session_found": true,
+    "wall_seconds": 33,
+    "history_length": 6,
+    "agent_mode": null,
+    "sql_mode": null,
+    "user_turns": 0,
+    "assistant_messages": 3,
+    "tool_calls": 2,
+    "tool_calls_by_name": {
+      "read": 1,
+      "python_repl": 1
+    },
+    "skills_invoked": [],
+    "bash_commands": [],
+    "thinking_blocks": 1,
+    "token_usage": {}
+  },
+  "snowflake": {
+    "queries": 52,
+    "by_type": {
+      "SELECT": 24,
+      "SHOW": 4,
+      "DESCRIBE": 1,
+      "ALTER_SESSION": 21,
+      "GET_FILES": 2
+    },
+    "failed_queries": 3,
+    "est_credits_analysis": 0.00285,
+    "total_elapsed_seconds": 30.4,
+    "bytes_scanned_gb": 0.0,
+    "read_only_violations": 0,
+    "account_usage_queries": 7,
+    "account_usage_unbounded": 0
+  },
+  "read_only_violations": [],
+  "failed_queries": [
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "DESCRIBE",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW_POS' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW_POS."
+    }
+  ],
+  "account_usage_unbounded": []
+}
