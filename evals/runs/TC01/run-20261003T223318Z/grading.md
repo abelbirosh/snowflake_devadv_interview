@@ -27,20 +27,20 @@ Tick manual checks with `[x]`, set the verdict line if you disagree with the com
 
 ## Manual checks
 
-- [ ] Skill loaded (transcript shows dbt-cost-tuning / SKILL.md read)
-- [ ] Phase 0 checkpoint shown and agent ended its turn (waited) before Q1
-- [ ] Window = 2 successful runs
-- [ ] orders is ~80% of credits and ranked #1
-- [ ] R1 on orders is #1 with a concrete diff on order_ts, real file path, lookback filter
-- [ ] Proposed unique_key verified with Q6; order_detail_id NOT claimed unique
-- [ ] Join fan-out reported (693.7M vs 673.7M rows; duplicate franchise_id)
-- [ ] R6 fires on the ORDER_DETAIL relationships test (~5% after zero-scan costing)
-- [ ] R3 listed under 'Observed, below threshold' (Signal ~50)
-- [ ] R4 under 'Needs owner review' (30-day / dev guard), not recommended
-- [ ] R2 and R5 on the 'Evaluated, didn't fire' line, not under 'Not evaluable'
-- [ ] Parent EXECUTE DBT PROJECT excluded; Python write query's credits not double-counted
-- [ ] Credit source label has a one-line reason
-- [ ] No hallucinated models, columns or numbers (spot-check 3 figures against baseline_runs.md)
+- [x] Skill loaded (transcript shows dbt-cost-tuning / SKILL.md read)
+- [x] Phase 0 checkpoint shown and agent ended its turn (waited) before Q1
+- [x] Window = 2 successful runs
+- [x] orders is ~80% of credits and ranked #1
+- [x] R1 on orders is #1 with a concrete diff on order_ts, real file path, lookback filter
+- [x] Proposed unique_key verified with Q6; order_detail_id NOT claimed unique
+- [x] Join fan-out reported (693.7M vs 673.7M rows; duplicate franchise_id)
+- [x] R6 fires on the ORDER_DETAIL relationships test (~5% after zero-scan costing)
+- [x] R3 listed under 'Observed, below threshold' (Signal ~50)
+- [x] R4 under 'Needs owner review' (30-day / dev guard), not recommended
+- [x] R2 and R5 on the 'Evaluated, didn't fire' line, not under 'Not evaluable'
+- [x] Parent EXECUTE DBT PROJECT excluded; Python write query's credits not double-counted
+- [x] Credit source label has a one-line reason
+- [x] No hallucinated models, columns or numbers (spot-check 3 figures against baseline_runs.md)
 
 ## Verdict override (optional: Pass / Partial / Fail, with reason)
 
