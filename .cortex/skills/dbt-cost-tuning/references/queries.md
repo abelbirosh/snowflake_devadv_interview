@@ -70,6 +70,27 @@ GET 'snow://dbt/<DB>.<SCHEMA>.<PROJECT>/results/query_id_<RUN_ID>/target/run_res
 From `manifest.json`, use these fields of `nodes[*]`: `resource_type`, `config.materialized`, `config.unique_key`,
 `config.cluster_by`, `relation_name`, `raw_code`/`compiled_code`, and `depends_on.nodes`. Also use `child_map` and `exposures`.
 
+## Q3a: Run coverage (Phase 2): which runs ACCOUNT_USAGE has
+
+Q3 inner-joins each run to its parent query in `ACCOUNT_USAGE.QUERY_HISTORY`, so a run that hasn't arrived yet
+(~45 min latency) drops out with no error. Run this first to see which runs Q3 will use:
+
+```sql
+WITH runs AS (
+  SELECT query_id AS run_id, query_start_time AS run_start, query_end_time AS run_end
+  FROM TABLE(<DB>.INFORMATION_SCHEMA.DBT_PROJECT_EXECUTION_HISTORY())
+  WHERE object_name = '<PROJECT>' AND schema_name = '<SCHEMA>' AND state = 'SUCCESS'
+  QUALIFY ROW_NUMBER() OVER (ORDER BY query_start_time DESC) <= <N_RUNS>
+)
+SELECT r.run_id, r.run_start, r.run_end, h.query_id IS NOT NULL AS in_account_usage
+FROM runs r
+LEFT JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY h
+  ON h.query_id = r.run_id AND h.start_time >= (SELECT MIN(run_start) FROM runs) - INTERVAL '1 minute'
+ORDER BY r.run_start DESC;
+```
+Runs with `in_account_usage = FALSE` go through Q3b. Cross-check with Q3's `runs_used`: it must equal the number of
+`TRUE` rows here, and the window size from Q1 minus Q3b's runs.
+
 ## Q3: Per-model metrics (Phase 2): primary path via ACCOUNT_USAGE
 
 Applies the credit-sourcing and attribution rules in `scoring-rubric.md` §1–2.
@@ -87,6 +108,7 @@ run_ctx AS (                                   -- who ran it, so we only pick up
   JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY h ON h.query_id = r.run_id
   WHERE h.start_time >= (SELECT MIN(run_start) FROM runs) - INTERVAL '1 minute'
 ),
+cov AS (SELECT COUNT(*) AS runs_used FROM run_ctx),  -- runs Q3 actually saw; compare with Q1's window size
 q AS (
   SELECT c.run_id, c.run_start, h.query_id, h.query_type, h.warehouse_size, h.execution_time, h.total_elapsed_time,
          h.bytes_scanned, h.rows_inserted, h.partitions_scanned, h.partitions_total,
@@ -144,9 +166,10 @@ SELECT qc.node,
        ROUND(MAX(qc.spill_local)  / 1e9, 2)                      AS max_spill_local_gb,
        ROUND(MAX(qc.spill_remote) / 1e9, 2)                      AS max_spill_remote_gb,
        COUNT(DISTINCT IFF(qc.spill_local > 0 OR qc.spill_remote > 0, qc.run_id, NULL)) AS runs_with_spill,
-       MAX(qc.rows_inserted)                                     AS rows_written
-FROM qc JOIN node_cost nc ON nc.node = qc.node
-GROUP BY qc.node, nc.credits_per_run, nc.raw_credits_per_run, nc.zero_scan_runs
+       MAX(qc.rows_inserted)                                     AS rows_written,
+       cov.runs_used                                             -- same on every row
+FROM qc JOIN node_cost nc ON nc.node = qc.node CROSS JOIN cov
+GROUP BY qc.node, nc.credits_per_run, nc.raw_credits_per_run, nc.zero_scan_runs, cov.runs_used
 ORDER BY nc.credits_per_run DESC NULLS LAST;
 ```
 Python-model write queries come back as `unattributed:<table>`. Match `<table>` to a Python model's `relation_name`,
@@ -154,21 +177,40 @@ move the row's metrics to that model, and drop its credits (SKILL.md Phase 2).
 
 `pct_attributed` = 100 → `attributed`; 0 → `estimated`; anything in between → `mixed (N% attributed)`.
 
+`runs_used` < the window size from Q1 (or no rows at all) means some runs aren't in `ACCOUNT_USAGE` yet. Run Q3b for
+the runs Q3a marks `FALSE`. Never report the plan on fewer runs than Q1 found without saying so.
+
+If **every** `node` starts with `unattributed:`, no query carries dbt's comment: per-model attribution isn't possible
+(SKILL.md Phase 2 step 2). Rows with a table name are `table-linked` writes; the rest is `unattributed`.
+
 ## Q3b: Fallback when ACCOUNT_USAGE hasn't caught up with recent runs
 
 `INFORMATION_SCHEMA.QUERY_HISTORY()` updates immediately but keeps only 7 days, and has **no partition or spill columns**.
 Use it for credits and timing only, label everything `estimated`, and mark R2 and R3 "not yet evaluable".
+Run it once per run that Q3a marks `in_account_usage = FALSE`. The run's user is read from the parent query itself,
+since it isn't in `ACCOUNT_USAGE` yet.
 
 ```sql
+WITH h AS (
+  SELECT * FROM TABLE(<DB>.INFORMATION_SCHEMA.QUERY_HISTORY(
+         END_TIME_RANGE_START => '<RUN_START>'::TIMESTAMP_LTZ,
+         END_TIME_RANGE_END   => DATEADD(second, 1, '<RUN_END>'::TIMESTAMP_LTZ),
+         RESULT_LIMIT => 10000))
+)
 SELECT REGEXP_SUBSTR(query_text, '"node_id": "([^"]+)"', 1, 1, 'e') AS node_id,
+       IFF(node_id IS NULL AND query_type IN ('CREATE_TABLE_AS_SELECT','INSERT','MERGE'),
+           LOWER(REGEXP_SUBSTR(query_text, 'TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?([A-Za-z0-9_."]+)', 1, 1, 'ie', 2)),
+           NULL) AS target_relation,
        query_id, query_type, warehouse_size, execution_time, total_elapsed_time, bytes_scanned, rows_inserted
-FROM TABLE(<DB>.INFORMATION_SCHEMA.QUERY_HISTORY(
-       END_TIME_RANGE_START => '<RUN_START>'::TIMESTAMP_LTZ,
-       END_TIME_RANGE_END   => '<RUN_END>'::TIMESTAMP_LTZ,
-       RESULT_LIMIT => 10000))
-WHERE user_name = '<RUN_USER>' AND query_id <> '<RUN_ID>'
-  AND query_type NOT IN ('USE','SHOW','DESCRIBE');
+FROM h
+WHERE user_name = (SELECT user_name FROM h WHERE query_id = '<RUN_ID>')
+  AND query_id <> '<RUN_ID>'
+  AND start_time >= '<RUN_START>'::TIMESTAMP_LTZ
+  AND query_type NOT IN ('USE','SHOW','DESCRIBE')
+  AND query_text NOT ILIKE 'SELECT CURRENT\\_%';
 ```
+Aggregate per `node_id` (or `unattributed:<target_relation>`) with the same credit formula, Python-model and
+zero-scan rules as Q3. Rows from Q3b are always `estimated`.
 
 ## Q4: Who reads each model (R2, R4)
 
@@ -211,11 +253,16 @@ SELECT SYSTEM$CLUSTERING_INFORMATION('<DB>.<MODEL_SCHEMA>.<TABLE>', '(<COLUMN>)'
 
 ## Q6: Key uniqueness and join fan-out (R1)
 
-Run this before proposing any `unique_key`. It's exact, so it scans one column of the model. Say so if the model is large.
+Run this before proposing any `unique_key`, including the key of a `delete+insert` strategy. It's exact, so it
+scans one column of the model. Say so if the model is large.
 ```sql
-SELECT COUNT(*) AS row_count, COUNT(DISTINCT <KEY>) AS distinct_keys
+SELECT COUNT(*) AS row_count, COUNT(*) - COUNT(<KEY>) AS null_keys, COUNT(DISTINCT <KEY>) AS distinct_keys
 FROM <MODEL_RELATION>;
 ```
+- `merge` key: needs `null_keys = 0` and `distinct_keys = row_count`.
+- `delete+insert` key (e.g. `order_id` on an order-line model): needs `null_keys = 0` in the model, and the key must be
+  unique in the table it comes from (run the same query on e.g. `ORDER_HEADER`), with the model's `distinct_keys` ≤ that
+  table's `row_count`. It doesn't need to be unique per model row.
 Free first check: compare Q3 `rows_written` with the grain table's `row_count` from Q5 or `INFORMATION_SCHEMA.TABLES`.
 More rows than the grain table means fan-out. To find the source, run the same query on each joined dimension's
 join key; dimensions are small, so this is cheap:
