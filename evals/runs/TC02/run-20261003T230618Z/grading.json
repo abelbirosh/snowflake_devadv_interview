@@ -37,6 +37,13 @@
       "pass": true
     }
   ],
-  "manual": {},
-  "verdict": null
+  "manual": {
+    "Skill triggered from the paraphrased prompt (not invoked by name)": true,
+    "Did not re-ask the run frequency": false,
+    "Monthly saving = per-run saving x ~30": true,
+    "Ranking matches TC01 (R1 orders #1, R6 fires)": true,
+    "Savings presented as estimates, not guarantees": true
+  },
+  "verdict": "Partial",
+  "override_reason": null
 }
