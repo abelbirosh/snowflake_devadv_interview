@@ -1,0 +1,73 @@
+{
+  "case": "TC01",
+  "run_id": "run-20261003T223318Z",
+  "started_at": "2026-10-03T22:33:18.121585+00:00",
+  "ended_at": "2026-10-03T22:50:19.213696+00:00",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "7518be9",
+  "skill_sha": "f43d60e0f1f8",
+  "cortex": {
+    "session_found": true,
+    "wall_seconds": 1004,
+    "history_length": 30,
+    "agent_mode": "standard",
+    "sql_mode": "write",
+    "user_turns": 1,
+    "assistant_messages": 15,
+    "tool_calls": 29,
+    "tool_calls_by_name": {
+      "skill": 1,
+      "read": 2,
+      "sql_execute": 21,
+      "ask_user_question": 1,
+      "bash": 4
+    },
+    "skills_invoked": [
+      "dbt-cost-tuning"
+    ],
+    "bash_commands": [
+      "mktemp -d",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.42ljoZccbe && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Extract model info\nfor uid, node in sorted(m.get('nodes', {}).items()):\n    if node.get('resource_type') in ('model', 'test'):\n        mat = node.g",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.42ljoZccbe && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Extract compiled SQL for the 3 table models\nfor uid in ['model.tasty_bytes.orders', 'model.tasty_bytes.customer_loyalty_metrics', 'model.tasty_bytes",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.42ljoZccbe && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Check staging view SQL\nfor uid in ['model.tasty_bytes.raw_pos_order_detail', 'model.tasty_bytes.raw_pos_order_header', 'model.tasty_bytes.raw_custom"
+    ],
+    "thinking_blocks": 11,
+    "token_usage": {}
+  },
+  "snowflake": {
+    "queries": 49,
+    "by_type": {
+      "SELECT": 22,
+      "DESCRIBE": 1,
+      "SHOW": 3,
+      "ALTER_SESSION": 21,
+      "GET_FILES": 2
+    },
+    "failed_queries": 3,
+    "est_credits_analysis": 0.00903,
+    "total_elapsed_seconds": 44.7,
+    "bytes_scanned_gb": 5.165,
+    "read_only_violations": 0,
+    "account_usage_queries": 7,
+    "account_usage_unbounded": 0
+  },
+  "read_only_violations": [],
+  "failed_queries": [
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "DESCRIBE",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW_POS' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW_POS."
+    }
+  ],
+  "account_usage_unbounded": []
+}

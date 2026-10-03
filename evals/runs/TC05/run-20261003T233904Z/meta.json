@@ -1,0 +1,14 @@
+{
+  "case": "TC05",
+  "type": "failure",
+  "run_id": "run-20261003T233904Z",
+  "started_at": "2026-10-03T23:39:04.000498+00:00",
+  "connection": "<REDACTED>",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "bb53181",
+  "skill_sha": "f43d60e0f1f8",
+  "prompts": [
+    "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+    "Yes, that project."
+  ]
+}

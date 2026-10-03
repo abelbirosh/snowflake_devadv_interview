@@ -2,7 +2,7 @@
 -- dbt-cost-tuning eval: teardown. Run as ACCOUNTADMIN when testing is finished.
 -- =============================================================================
 USE ROLE ACCOUNTADMIN;
-SET me = CURRENT_USER();
+SET me = '"' || CURRENT_USER() || '"';   -- quoted: user names can be case-sensitive (IDENTIFIER() upper-cases a bare name)
 
 -- Restore the user settings changed in 01_restricted_roles.sql / 03_optional_cases.sh tc03.
 -- Put back the values you recorded from DESC USER (('ALL') is the Snowflake default for new users).

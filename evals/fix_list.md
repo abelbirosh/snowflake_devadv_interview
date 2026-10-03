@@ -1,0 +1,38 @@
+# Fix list from the 2026-10-03 eval runs
+
+Bugs found in the 6 runs on skill version `f43d60e0f1f8` (TC01 ×3, TC02, TC05, TC10). Evidence is in each run's
+`findings.md` under [`runs/`](runs/); pass rates are in [`results.md`](results.md). None of these is fixed in the skill
+yet, so the results describe `f43d60e0f1f8` as is.
+
+## Skill bugs
+
+Ordered by how often they showed up, then by impact on the plan.
+
+| # | Bug | Seen in | Fix (file → section) |
+|---|---|---|---|
+| S1 | **Source tables queried under a guessed schema.** Q6 on a source table (FRANCHISE, ORDER_HEADER) used `TASTY_BYTES_DBT_DB.RAW_POS` or the dbt source name `TB_101` as a schema, failed, and was retried | 5 of 6 runs (9 failed queries) | SKILL.md Phase 3, Q6 on a joined dimension: take the table from the manifest source's `relation_name`, never a guessed schema |
+| S2 | **R5 on a passthrough view lands in the wrong section.** `raw_pos_order_header` scores 40 + 0 + 30 = 70 with ~0 Impact. Placed as recommendation #3 ("not recommended" in its own text) in TC01 run 1; listed under both "Observed, below threshold" and "Evaluated, didn't fire" in TC05. Correct in the other 4 runs only because the agent overrode the rubric | 2 of 6 wrong | scoring-rubric.md R5: make "the view does real work (joins or aggregations)" a **gate**, not a 30-point row. §3 placement: a rule with Impact < 1% goes on the "Evaluated, didn't fire" line even at Signal ≥ 60 |
+| S3 | **Python model credits flip between runs.** With `attributed` credits, `sales_metrics_by_location`'s write query was dropped in 4 runs and added in 1. The rubric says drop it, which is right for `estimated` credits (TC05 did this correctly) but undercounts with `attributed` credits: QUERY_ATTRIBUTION_HISTORY credits each query on its own (Snowflake docs: sum by `root_query_id`) | 5 of 5 attributed runs (inconsistent) | scoring-rubric.md §2 Python models + SKILL.md Phase 2 step 3: drop the write query's credits only when they're `estimated`; add them when `attributed` |
+| S4 | **The skill's own queries count as "outside reads".** Q4 doesn't exclude earlier analysis runs, so `ORDERS` went from 1 to 3 outside reads across runs, then the staging views started showing reads too. No outcome changed yet, but R2/R4 evidence gets noisier every run | Grows with every run | Tag every skill query (e.g. a `/* dbt-cost-tuning */` comment) and exclude that tag in queries.md Q4 |
+| S5 | **Asks for the run frequency the user already gave.** TC02's prompt says "runs daily"; the checkpoint asked "How often does this dbt build run?" anyway, then assumed daily | 1 of 1 (TC02) | SKILL.md Phase 0 step 4: if the message states a frequency, show `Run frequency: <value> (from your message)` in the checkpoint and don't ask |
+| S6 | **"Not evaluable" heading missing** when nothing is unavailable | 1 of 6 (TC01 run 1) | SKILL.md Phase 4 template: always print every section heading; an empty section says "None" |
+| S7 | **Handover code isn't deployable as shown.** After declining to apply (TC10), the "do it yourself" SQL dropped `{{ ref() }}`, and the suggested `snow dbt deploy --project …` / `snow dbt execute … --args='…'` don't match the syntax in the repo's own scripts | TC10 | SKILL.md Failure handling ("User asks to apply a fix") + closing offer: keep `ref()`/`source()` in any code shown, and don't invent deploy commands (quote a checked reference or point to the user's process) |
+| S8 | **R6 `where` filter hard-codes a relation** (`TASTY_BYTES_DBT_DB.RAW.ORDER_HEADER`) instead of `{{ source(...) }}` | 1 of 6 (TC02) | SKILL.md Phase 3 (R6): the proposed `where` uses `source()` / `ref()` |
+| S9 | **R1 "monotonic event column" counted on a full-history aggregate.** `customer_loyalty_metrics` (one row per customer, all history) scored 50 in TC05, 0–20 elsewhere | 1 of 6 (TC05) | scoring-rubric.md R1: the event-column row counts only if the column survives to the model's grain (in the output or a GROUP BY key) |
+| S10 | **Header credit label varies** for the same data: `attributed` (models 100%, tests 50%) in 3 runs, `mixed` in 2 | 5 of 5 attributed runs (inconsistent) | scoring-rubric.md §2: define the header label: `attributed` only if every node is; otherwise `mixed (N% attributed)` |
+
+## Harness and test-plan bugs
+
+| # | Bug | Status |
+|---|---|---|
+| H1 | `eval.py finish` took the **newest** Cortex session after the run started. When the main session spawns sub-agents (`task` tool), that's a sub-agent, so TC10 was first graded on a 33-second sub-agent transcript | **Fixed** (`eval.py`: earliest session; `finish --rerun --keep-snowflake` re-grades without Snowflake) |
+| H2 | `01_restricted_roles.sql` failed on `GRANT ROLE … TO USER IDENTIFIER($me)`: `IDENTIFIER()` upper-cases a bare name, and this user's name is stored in lowercase | **Fixed** (`01e6499`: quote the name; same in teardown and `03_optional_cases.sh`) |
+| H3 | Adding the TC05 connection as a `python3 -c` one-liner broke in zsh (`!` history expansion) | **Fixed** (`setup/00_add_eval_connection.py`) |
+| H4 | TC07 and TC08 had one prompt, but the Phase 0 checkpoint is a hard stop, so they'd never reach Q1/Q3 | **Fixed** (second prompt added in `cases.json`) |
+| H5 | `baseline_runs.md` expectations are on `estimated` credits (`orders` ≈ 81%, R6 5.2%). Once QUERY_ATTRIBUTION_HISTORY caught up, runs report `attributed` figures (`orders` 87.9%, R6 6.3%, total 0.14625/run). TC05's fallback reproduces the estimated figures exactly | Open: add the attributed figures to `baseline_runs.md`; reword the TC01 manual check "orders is ~80%" → "80–90%" and "Python write not double-counted" → "handled per credit source" |
+| H6 | Eval activity contaminates `ACCESS_HISTORY` (manual baseline checks and earlier skill runs read `ORDERS`) | Open: mostly fixed by S4; also avoid ad-hoc reads of the models between runs |
+| H7 | `telemetry.user_turns` misses answers given through Cortex's `ask_user_question` picker (TC01 run 2 shows 1 turn for 2 answers) | Open: also count tool results of `ask_user_question` |
+| H8 | `failed_queries` includes 2 failures per run from Cortex Code itself (`CORTEX_CODE` database), which aren't the skill's | Open: report them separately in telemetry |
+| H9 | `finish` needs an interactive browser login (`AG26866` uses OAuth), so it can't run from automation | Open: document in RUNBOOK.md, or use a key-pair connection for telemetry (`EVAL_ADMIN_CONN`) |
+| H10 | `cortex exec --allowed sql_execute` still blocks SQL, so the smoke test can't run a query | Open: document; the interactive run is the real check |
+| H11 | RUNBOOK.md screenshot 02 expects the 2-run window at the checkpoint, but Q1 runs after it | Open: move the window check to the plan header |

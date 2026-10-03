@@ -1,0 +1,49 @@
+{
+  "auto": [
+    {
+      "check": "skill_invoked (dbt-cost-tuning)",
+      "pass": true
+    },
+    {
+      "check": "plan_header",
+      "pass": true
+    },
+    {
+      "check": "section_recommendations",
+      "pass": true
+    },
+    {
+      "check": "monthly_savings",
+      "pass": true
+    },
+    {
+      "check": "r1_incremental_orders",
+      "pass": true
+    },
+    {
+      "check": "r6_relationships_test",
+      "pass": true
+    },
+    {
+      "check": "estimate_language",
+      "pass": true
+    },
+    {
+      "check": "read_only_snowflake (0 non-read statements)",
+      "pass": true
+    },
+    {
+      "check": "account_usage_queries_time_bounded",
+      "pass": true
+    }
+  ],
+  "manual": {
+    "Skill triggered from the paraphrased prompt (not invoked by name)": true,
+    "Did not re-ask the run frequency": false,
+    "Monthly saving = per-run saving x ~30": true,
+    "Ranking matches TC01 (R1 orders #1, R6 fires)": true,
+    "Savings presented as estimates, not guarantees": true
+  },
+  "verdict": "Partial",
+  "override_reason": null
+}
