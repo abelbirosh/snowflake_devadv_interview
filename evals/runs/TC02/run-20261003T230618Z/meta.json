@@ -1,0 +1,14 @@
+{
+  "case": "TC02",
+  "type": "happy",
+  "run_id": "run-20261003T230618Z",
+  "started_at": "2026-10-03T23:06:18.502070+00:00",
+  "connection": "<REDACTED>",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "36c874a",
+  "skill_sha": "f43d60e0f1f8",
+  "prompts": [
+    "Our dbt build runs daily and credits are creeping up. Find the expensive dbt models and give me an optimization plan.",
+    "Yes, that project."
+  ]
+}
