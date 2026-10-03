@@ -186,6 +186,7 @@ def cmd_start(args):
 
 # ---------------------------------------------------------------------------- finish
 def find_session(started_at):
+    """The first session created after the run started. Later ones are sub-agents the main session spawned."""
     best = None
     for p in glob.glob(os.path.join(CONV_DIR, "*.json")):
         try:
@@ -193,7 +194,7 @@ def find_session(started_at):
         except Exception:
             continue
         created = dt.datetime.fromisoformat(m.get("created_at", "1970-01-01T00:00:00Z").replace("Z", "+00:00"))
-        if created >= started_at - dt.timedelta(minutes=1) and (best is None or created > best[0]):
+        if created >= started_at - dt.timedelta(minutes=1) and (best is None or created < best[0]):
             best = (created, m)
     return best[1] if best else None
 
@@ -372,7 +373,13 @@ def cmd_finish(args):
         write(os.path.join(run_dir, "transcript.json"),
               {"unparsed_lines": bad, "messages": redact_obj(public_transcript(tjson))})
 
-    sf_summary, rows, violations, failed, unbounded = snowflake_telemetry(started, ended)
+    if args.keep_snowflake:  # re-process the transcript only; reuse the Snowflake telemetry already saved
+        old = json.load(open(os.path.join(run_dir, "telemetry.json")))
+        sf_summary, violations = old["snowflake"], old["read_only_violations"]
+        failed, unbounded = old["failed_queries"], old["account_usage_unbounded"]
+        rows = json.load(open(os.path.join(run_dir, "queries.json")))
+    else:
+        sf_summary, rows, violations, failed, unbounded = snowflake_telemetry(started, ended)
     telemetry = {
         "case": meta["case"], "run_id": meta["run_id"], "started_at": meta["started_at"],
         "ended_at": ended.isoformat(), "cortex_version": meta["cortex_version"],
@@ -492,6 +499,8 @@ def main():
     s = sub.add_parser("start"); s.add_argument("case"); s.add_argument("--force", action="store_true")
     f = sub.add_parser("finish"); f.add_argument("--session", help="Cortex session id, if auto-detect picks the wrong one")
     f.add_argument("--rerun", metavar="RUN_DIR", help="re-process an already finished run, e.g. evals/runs/TC01/run-...")
+    f.add_argument("--keep-snowflake", action="store_true",
+                   help="with --rerun: reuse the saved Snowflake telemetry instead of querying it again")
     p = sub.add_parser("publish"); p.add_argument("run_dir", nargs="?", help="evals/runs/<CASE>/<run> (default: latest)")
     sub.add_parser("summary")
     a = ap.parse_args()
