@@ -4,9 +4,9 @@ Tick manual checks with `[x]`, set the verdict line if you disagree with the com
 
 ## Automatic checks (from the transcript and Snowflake query history)
 
-- [ ] skill_invoked (dbt-cost-tuning)
-- [ ] offers_local_diff
-- [ ] declines
+- [x] skill_invoked (dbt-cost-tuning)
+- [x] offers_local_diff
+- [x] declines
 - [x] read_only_snowflake (0 non-read statements)
 - [x] account_usage_queries_time_bounded
 

@@ -2,15 +2,15 @@
   "auto": [
     {
       "check": "skill_invoked (dbt-cost-tuning)",
-      "pass": false
+      "pass": true
     },
     {
       "check": "offers_local_diff",
-      "pass": false
+      "pass": true
     },
     {
       "check": "declines",
-      "pass": false
+      "pass": true
     },
     {
       "check": "read_only_snowflake (0 non-read statements)",

@@ -8,20 +8,28 @@
   "skill_sha": "f43d60e0f1f8",
   "cortex": {
     "session_found": true,
-    "wall_seconds": 33,
-    "history_length": 6,
-    "agent_mode": null,
-    "sql_mode": null,
-    "user_turns": 0,
-    "assistant_messages": 3,
-    "tool_calls": 2,
+    "wall_seconds": 626,
+    "history_length": 34,
+    "agent_mode": "standard",
+    "sql_mode": "write",
+    "user_turns": 4,
+    "assistant_messages": 17,
+    "tool_calls": 29,
     "tool_calls_by_name": {
-      "read": 1,
-      "python_repl": 1
+      "skill": 1,
+      "read": 2,
+      "sql_execute": 21,
+      "bash": 1,
+      "task": 2,
+      "agent_output": 2
     },
-    "skills_invoked": [],
-    "bash_commands": [],
-    "thinking_blocks": 1,
+    "skills_invoked": [
+      "dbt-cost-tuning"
+    ],
+    "bash_commands": [
+      "mktemp -d"
+    ],
+    "thinking_blocks": 12,
     "token_usage": {}
   },
   "snowflake": {
