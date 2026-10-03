@@ -1,0 +1,86 @@
+{
+  "auto": [
+    {
+      "check": "skill_invoked (dbt-cost-tuning)",
+      "pass": true
+    },
+    {
+      "check": "plan_header",
+      "pass": true
+    },
+    {
+      "check": "section_where_cost",
+      "pass": true
+    },
+    {
+      "check": "section_recommendations",
+      "pass": true
+    },
+    {
+      "check": "section_below_threshold",
+      "pass": true
+    },
+    {
+      "check": "section_not_evaluable",
+      "pass": false
+    },
+    {
+      "check": "section_assumptions",
+      "pass": true
+    },
+    {
+      "check": "credit_source_label",
+      "pass": true
+    },
+    {
+      "check": "r1_incremental_orders",
+      "pass": true
+    },
+    {
+      "check": "r1_is_incremental_filter",
+      "pass": true
+    },
+    {
+      "check": "r1_unique_key",
+      "pass": true
+    },
+    {
+      "check": "r1_full_refresh_reminder",
+      "pass": true
+    },
+    {
+      "check": "r6_relationships_test",
+      "pass": true
+    },
+    {
+      "check": "offers_local_diff",
+      "pass": true
+    },
+    {
+      "check": "fanout_flagged",
+      "pass": true
+    },
+    {
+      "check": "needs_owner_review_section",
+      "pass": true
+    },
+    {
+      "check": "no_drop_recommendation",
+      "pass": true
+    },
+    {
+      "check": "no_unique_order_detail_claim",
+      "pass": true
+    },
+    {
+      "check": "read_only_snowflake (0 non-read statements)",
+      "pass": true
+    },
+    {
+      "check": "account_usage_queries_time_bounded",
+      "pass": true
+    }
+  ],
+  "manual": {},
+  "verdict": null
+}
