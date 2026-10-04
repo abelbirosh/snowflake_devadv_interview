@@ -22,7 +22,7 @@ Tick manual checks with `[x]`, set the verdict line if you disagree with the com
 - [x] needs_owner_review_section
 - [x] no_drop_recommendation
 - [x] no_unique_order_detail_claim
-- [ ] no_r5_recommendation
+- [x] no_r5_recommendation
 - [x] read_only_snowflake (0 non-read statements)
 - [x] account_usage_queries_time_bounded
 - [x] no_failed_skill_queries

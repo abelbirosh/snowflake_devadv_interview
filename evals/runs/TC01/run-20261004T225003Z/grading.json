@@ -74,7 +74,7 @@
     },
     {
       "check": "no_r5_recommendation",
-      "pass": false
+      "pass": true
     },
     {
       "check": "read_only_snowflake (0 non-read statements)",

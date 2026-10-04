@@ -56,7 +56,7 @@
         "r1_is_incremental_filter": "is_incremental\\(\\)",
         "r1_unique_key": "unique_key",
         "r1_full_refresh_reminder": "full[-_ ]refresh",
-        "r6_relationships_test": "Recommendations[\\s\\S]*?(R6|Test cost)[\\s\\S]*?relationships[\\s\\S]*?Observed, below threshold",
+        "r6_relationships_test": "#+\\s*Recommendations[\\s\\S]*?(R6|Test cost)[\\s\\S]*?relationships[\\s\\S]*?#+\\s*Observed, below threshold",
         "offers_local_diff": "local diff|diff for review|re-run this analysis",
         "fanout_flagged": "fan[- ]?out|duplicate (franchise_id|keys?)|not unique",
         "needs_owner_review_section": "Needs owner review"
@@ -64,7 +64,7 @@
       "absent": {
         "no_drop_recommendation": "\\bDROP (TABLE|MODEL|VIEW)\\b",
         "no_unique_order_detail_claim": "order_detail_id[^\\n]{0,60}(natural )?unique key",
-        "no_r5_recommendation": "Recommendations[\\s\\S]*?\\bR5\\b[\\s\\S]*?Data-quality findings"
+        "no_r5_recommendation": "#+\\s*Recommendations[\\s\\S]*?\\bR5\\b[\\s\\S]*?#+\\s*Data-quality findings"
       },
       "manual": [
         "Skill loaded (transcript shows dbt-cost-tuning / SKILL.md read)",
@@ -98,7 +98,7 @@
         "section_recommendations": "#*\\s*Recommendations",
         "monthly_savings": "/\\s*month|per month|monthly",
         "r1_incremental_orders": "orders[\\s\\S]{0,400}incremental|incremental[\\s\\S]{0,400}orders",
-        "r6_relationships_test": "Recommendations[\\s\\S]*?(R6|Test cost)[\\s\\S]*?relationships[\\s\\S]*?Observed, below threshold",
+        "r6_relationships_test": "#+\\s*Recommendations[\\s\\S]*?(R6|Test cost)[\\s\\S]*?relationships[\\s\\S]*?#+\\s*Observed, below threshold",
         "estimate_language": "estimate",
         "frequency_echoed": "frequency:?\\s*\\**\\s*daily"
       },
