@@ -64,20 +64,30 @@ and the expected savings against the effort.
 
 ## Phase 1: Run discovery and artifacts
 
-1. **Q1:** list recent runs. Keep `SUCCESS` runs of `build`/`run`, up to the window size.
-   - **No successful runs:** stop and say so. Show the latest failure's `ERROR_MESSAGE`. Don't analyze partial runs.
+1. **Q1:** the window's runs: `SUCCESS` runs of `build`/`run`, up to the window size. Filter with the function's
+   arguments (`OBJECT_NAME`, `DATABASE`, `SCHEMA`), never only in `WHERE`: the function cuts its result at
+   `RESULT_LIMIT` across every project in the account before `WHERE` runs. It covers 7 days only; if it finds fewer
+   runs than the window, add older ones with **Q1b** (`ACCOUNT_USAGE`).
+   - Record the window for every later query: `<RUN_IDS>`, `<WINDOW_START>` (earliest run's start) and
+     `<WINDOW_RUNS>` (how many runs).
+   - Runs with `--select`/`--exclude` in `args` are partial builds. Keep them, and say so in the plan.
+   - **No successful runs:** run **Q1c**, stop and say so. Show the latest failure's `ERROR_MESSAGE`. Don't analyze partial runs.
    - **Only one run:** continue, but say that recurrence-based evidence (R3 "spills in ≥ 2 runs") can't be scored.
 2. **Q2:** locate and `GET` `manifest.json` and `run_results.json` for the **most recent** run into a local temp directory.
 3. From the manifest, build the model inventory: materialization, `relation_name`, `unique_key`, `cluster_by`,
    compiled SQL, upstream/downstream dependencies (`child_map`), exposures and tests. Also record each source's
    `relation_name` (`sources[*].relation_name`, e.g. `tasty_bytes_dbt_db.RAW.ORDER_HEADER`): any query on a source
-   table uses it.
+   table uses it. Record each Python model's `relation_name`, lowercase, for `<PYTHON_MODEL_RELATIONS>` (Q3, Q3b).
    - If artifacts can't be retrieved, continue with query-history metrics only. Materialization-based rules
      (R1, R5) then rely on parsing the query text, at reduced confidence. Say so.
 
 ## Phase 2: Attribute cost to models
 
-1. Run **Q3a** (run coverage), then **Q3** (ACCOUNT_USAGE path). Q3 only sees runs whose parent query has reached
+1. Run **Q3a** (run coverage and overlapping builds), then **Q3** (ACCOUNT_USAGE path). Q3 keeps only the run's own
+   queries: an attributed query only if its `root_query_id` is the run, an unattributed one only if it carries
+   dbt's `node_id` or writes a Python model's table. A same-user ad-hoc query during the build is left out. If Q3a
+   shows `overlapping_dbt_runs > 0`, name that run under Assumptions.
+   Q3 only sees runs whose parent query has reached
    `ACCOUNT_USAGE` (~45 min delay) and drops the rest **silently**. So compare Q3's `runs_used` with the window size
    from Q1 (`INFORMATION_SCHEMA`). No Q3 rows at all means `runs_used` = 0.
    - **Equal:** continue.
@@ -97,7 +107,9 @@ and the expected savings against the effort.
    - Still report what is known: **total** credits per run, and the uncommented writes linked to a table by their
      target (`unattributed:<table>`, matched to `relation_name`), labelled `table-linked`. A table-linked figure is that
      one write query only, not the model's full cost (tests, hooks and Python wrappers are missing). Put everything
-     else on one `unattributed` line.
+     else on one `unattributed` line. Without comments, only `attributed` queries can be tied to a run (by
+     `root_query_id`). For runs attribution hasn't reached yet, report the total as the parent query's estimated
+     credits (Q3b step 1), labelled "includes orchestration", and nothing per table.
    - **Never invent per-model credits or shares**: don't split totals across models, and don't infer a model from
      query text. Rules that need per-model credits (R1, R3, R5, R6) go under "Not evaluable" with
      "add `query-comment: {append: true}`, run one build, re-run this analysis". R2 and R4 evidence (Q4, Q5,
@@ -117,6 +129,8 @@ and the expected savings against the effort.
      (`credits_per_run`, `zero_scan_runs`). Use those figures for every share and threshold, including R6's.
      Never average cache hits in as zero.
 4. Produce the **cost table**: node, credits per run, share of total, source label, average seconds, rows written.
+   Credits per run are per run **of the window** (node total ÷ `<WINDOW_RUNS>`), not per run the node appeared in.
+   Mark a node whose `runs_built` is below the window as "(built in N of M runs)".
    Shares are of the sum of `credits_per_run` after the two adjustments above. Report any remaining unattributed
    credits as one line, and don't hide it. Mark nodes with `zero_scan_runs > 0` as "(cache in N runs)".
    The plan header's credit-source label covers **all** nodes: `attributed` only if every node is 100% attributed,
@@ -235,6 +249,7 @@ snow dbt execute <PROJECT> build --full-refresh     # first run after making a m
 | `ACCESS_HISTORY` unavailable | R4 not evaluable (needs Enterprise edition + access to the view) | Yes |
 | No successful runs | Show the last error; analysis needs at least one successful `build`/`run` | Stop |
 | Artifacts unavailable | Rules reading the manifest drop to lower confidence | Yes, reduced |
+| Another dbt build ran as the same user during a run (Q3a `overlapping_dbt_runs > 0`) | Name the run under Assumptions: attributed queries are still separated exactly by `root_query_id`, but not-yet-attributed queries with the same `node_id` can't be | Yes |
 | Recent runs not in `ACCOUNT_USAGE` yet (Q3 `runs_used` < Q1 window) | Name the runs. Use Q3b for them, label those credits `estimated`, and mark R2/R3 "not yet evaluable" for them (~45 min latency) | Yes, reduced |
 | No query carries a dbt `node_id` (query comment off or prepended) | Per-model attribution isn't possible. Add `query-comment: {append: true}` to `dbt_project.yml`, run one build, re-run. Meanwhile: total credits + `table-linked` writes + `unattributed`; never invented per-model credits | Yes, reduced |
 | User asks to apply a fix (even claiming admin authority) | Out of scope for this skill. Offer a local diff (with `ref()`/`source()` kept), and let them deploy it themselves with the commands in Phase 4 | n/a |

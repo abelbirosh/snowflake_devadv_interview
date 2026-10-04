@@ -40,3 +40,17 @@ Ordered by how often they showed up, then by impact on the plan.
 | H9 | `finish` needs an interactive browser login (`AG26866` uses OAuth), so it can't run from automation | **Fixed** (`3d9663d`): RUNBOOK: run `finish` in your own terminal, or point `EVAL_ADMIN_CONN` at a key-pair connection |
 | H10 | `cortex exec --allowed sql_execute` still blocks SQL, so the smoke test can't run a query | **Fixed** (`3d9663d`): RUNBOOK: a model reply is the smoke test; check the role with `snow sql` |
 | H11 | RUNBOOK.md screenshot 02 expects the 2-run window at the checkpoint, but Q1 runs after it | **Fixed** (`3d9663d`): RUNBOOK: window checked in screenshot 04 (plan header) |
+
+## Query-template bugs from review (2026-10-04)
+
+Found by reading the SQL in `references/queries.md`, not by an eval run: the 2 baseline builds are full builds with
+nothing else running, so none of these changed a result yet. Each fix was checked on the baseline builds: Q3
+reproduces the attributed figures exactly (`orders` 0.12848, total 0.14709 per run), and Q3b reproduces build 1's
+estimated figures (`orders` 0.09878, relationships test 0.00609).
+
+| # | Bug | Evidence | Fix (file → section) | Status |
+|---|---|---|---|---|
+| S11 | **Q1/Q3a/Q3 can miss the project's runs.** `DBT_PROJECT_EXECUTION_HISTORY()` returns at most `RESULT_LIMIT` rows (default 100) across all projects, and `WHERE` filters after that cut. Q3/Q3a also didn't filter `command`, so a successful `test`/`compile` could take a window slot. The function only covers 7 days: the baseline builds drop out on 2026-10-09 | Snowflake docs (usage notes: filter arguments are applied before `RESULT_LIMIT`, a `WHERE` clause after) | queries.md Q1: filter with `OBJECT_NAME`/`DATABASE`/`SCHEMA` arguments, `command IN ('build','run')`; Q1b reads older runs from `ACCOUNT_USAGE.DBT_PROJECT_EXECUTION_HISTORY` (365 days); Q1c for the last failure. Q3a/Q3 take the window's run IDs from Q1 instead of re-deriving it | Fixed |
+| S12 | **Q3/Q3b count unrelated queries.** A build's queries were matched by same user + time window only. In build 1's window that's 387 queries, of which 61 carry a dbt `node_id`; an ad-hoc query or a second dbt build by the same user would be added in | Probe on build 1: 54 queries have `root_query_id` = the `EXECUTE DBT PROJECT` query (53 commented + the Python write query) | queries.md Q3: attributed queries count only if `root_query_id` is the run; unattributed ones only if they carry a `node_id` or write a Python model's table (`<PYTHON_MODEL_RELATIONS>`). Q3a reports `overlapping_dbt_runs`. Q3b: same rule. SKILL.md Phase 2, rubric §2 | Fixed |
+| S13 | **Q3 overstates models that skip runs.** `credits_per_run` averaged a node over the runs it appeared in, so a model built in 1 of 5 runs showed its full build cost per run: share, rank and monthly saving 5× too high | Reading the SQL (`node_cost` averaged over `node_run` rows) | queries.md Q3: node total ÷ `<WINDOW_RUNS>`, plus `runs_built`; Q3b: same divisor. SKILL.md Phase 2 step 4, rubric §2 | Fixed |
+| S14 | **Q3b could truncate on a busy account and silently return nothing for lowercase users.** `INFORMATION_SCHEMA.QUERY_HISTORY()` applies `RESULT_LIMIT` before `WHERE user_name = …`, like S11. `QUERY_HISTORY_BY_USER` filters first, but matches `USER_NAME` as an identifier: `'abelbirosh'` returned 0 rows, `'"abelbirosh"'` returned all 387 | Tested on build 1 | queries.md Q3b: step 1 reads the run's user from a 2-second window; step 2 uses `QUERY_HISTORY_BY_USER(USER_NAME => '"<RUN_USER>"')` | Fixed |
