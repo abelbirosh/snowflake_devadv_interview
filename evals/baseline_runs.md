@@ -44,11 +44,31 @@ No queries spilled to remote storage. `orders` scanned 100% of its source partit
 | R6 Test cost | **Fires** on the `ORDER_DETAIL` relationships test | 0.00609 credits/run after zero-scan costing = 5.2% of 0.1171 (2.7% if cache hits are averaged in as 0, which is the TC01 run-1 bug), 674M-row table, full-scan test type |
 | R3 Spill | Observed, below threshold (Signal 50) | > 1 GB local spill in 2 of 2 runs, no remote spill |
 | R4 Unused | Under "Needs owner review" (not "Not evaluable") | ~1 day of account history and a dev target, so the 30-day guard caps it |
-| R2 Cluster key | Doesn't fire; on the "Evaluated, didn't fire" line | No outside reads of `orders` |
-| R5 Heavy view | Doesn't fire; on the "Evaluated, didn't fire" line | Staging views only select and rename; near-zero cost |
+| R2 Cluster key | Doesn't fire; on the "Evaluated, didn't fire" line, Signal ≤ 35 | `ORDERS` has 464 micro-partitions (< 1,000) and reads don't share a filter column, so only the scan-ratio row (35) can count. Outside reads did appear after 2026-10-02 (the manual baseline check, then untagged Q6 runs of earlier skill versions), which doesn't change the score |
+| R5 Heavy view | Doesn't fire; on the "Evaluated, didn't fire" line (gate failed) | Staging views only select and rename, so they fail R5's "does real work" gate (rubric R5) |
 
 Cost basis (new Q3, verified on these runs): 63 nodes incl. 50 tests; raw 0.1133 credits/run, 0.1171 after zero-scan costing,
-0.1161 after also dropping the Python write query's credits. `orders` ≈ 81%.
+0.1161 after also dropping the Python write query's credits. `orders` ≈ 81%. TC05 (no `ACCOUNT_USAGE`, Q3b only)
+reproduced these figures: 0.11709/run, `orders` 0.09439 (80.6%), relationships test 0.00609 (5.2%).
+
+## Attributed credits (from 2026-10-03)
+
+`QUERY_ATTRIBUTION_HISTORY` caught up on 2026-10-03 (latest row 12:36 PDT), so runs with `ACCOUNT_USAGE` access
+report **attributed** credits from then on. Same ranking, different numbers:
+
+| Node | Credits/run (attributed) | Share | Estimated basis, for comparison |
+|---|---|---|---|
+| `orders` | 0.12848 | 87.4% | 0.09439 (80.6%) |
+| `relationships` test on `ORDER_DETAIL.ORDER_ID` | 0.00924 (cache hit in run 2, costed at run 1) | 6.3% | 0.00609 (5.2%) |
+| `customer_loyalty_metrics` | 0.00671 | 4.6% | 0.00540 |
+| `sales_metrics_by_location` (Python) | 0.00144 = outer 0.00060 + write query 0.00084 | 1.0% | 0.00767 (outer query only) |
+| **Total** | **0.14709** | | 0.11709 |
+
+- Header label: `mixed`. The models are 100% attributed, but run 2's cache-hit tests have no attribution row.
+- Python model: with attributed credits the write query is **added** (rubric §2). Runs before the S3 fix dropped it
+  (total 0.14625, `orders` 87.9%).
+- Estimated credits overstate the Python model most (6.6% vs 1.0%): its outer query mostly waits on Snowpark, and
+  execution time × warehouse rate charges that wait.
 
 ## Findings that changed the skill
 

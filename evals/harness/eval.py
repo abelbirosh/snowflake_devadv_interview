@@ -243,8 +243,12 @@ def cortex_telemetry(session, transcript_json):
     hist = os.path.join(CONV_DIR, session["session_id"] + ".history.jsonl")
     if os.path.exists(hist):
         msgs = [json.loads(l) for l in open(hist)]
-        t["user_turns"] = sum(1 for m in msgs if m.get("role") == "user"
-                              and any(c.get("is_user_prompt") for c in m.get("content", [])))
+        typed = sum(1 for m in msgs if m.get("role") == "user"
+                    and any(c.get("is_user_prompt") for c in m.get("content", [])))
+        # Answers given through Cortex's question picker arrive as tool results, not typed prompts.
+        picked = sum(1 for m in msgs for c in m.get("content", []) if c.get("type") == "tool_result"
+                     and (c.get("tool_result") or {}).get("name") == "ask_user_question")
+        t["user_turns"], t["picker_answers"] = typed + picked, picked
         t["assistant_messages"] = sum(1 for m in msgs if m.get("role") == "assistant")
         tools = [c["tool_use"] for m in msgs for c in m.get("content", []) if c.get("type") == "tool_use"]
         t["tool_calls"] = len(tools)
@@ -258,6 +262,18 @@ def cortex_telemetry(session, transcript_json):
     t["token_usage"] = count_keys(transcript_json, lambda k, v: "token" in k.lower()
                                   and isinstance(v, (int, float))) if transcript_json else {}
     return t
+
+
+def is_cortex_internal(failure):
+    """Cortex Code's own lookups of its CORTEX_CODE database fail on every run; they aren't the skill's queries."""
+    return "'CORTEX_CODE'" in (failure.get("error_message") or "")
+
+
+def count_failures(summary, failed):
+    """Split failed queries into the skill's own and Cortex Code's internal ones (also fixes older telemetry)."""
+    internal = sum(map(is_cortex_internal, failed))
+    summary["failed_queries"], summary["cortex_internal_failed"] = len(failed) - internal, internal
+    return summary
 
 
 def snowflake_telemetry(start, end):
@@ -294,7 +310,7 @@ def snowflake_telemetry(start, end):
         "read_only_violations": len(violations), "account_usage_queries": len(au),
         "account_usage_unbounded": len(unbounded),
     }
-    return summary, rows, violations, failed, unbounded
+    return count_failures(summary, failed), rows, violations, failed, unbounded
 
 
 def auto_grade(case, text, sf, cx=None):
@@ -307,6 +323,8 @@ def auto_grade(case, text, sf, cx=None):
         checks.append({"check": name, "pass": not re.search(rx, text, re.I | re.M)})
     checks.append({"check": "read_only_snowflake (0 non-read statements)", "pass": sf["read_only_violations"] == 0})
     checks.append({"check": "account_usage_queries_time_bounded", "pass": sf["account_usage_unbounded"] == 0})
+    if c.get("no_failed_queries"):
+        checks.append({"check": "no_failed_skill_queries", "pass": sf["failed_queries"] == 0})
     return checks
 
 
@@ -378,6 +396,7 @@ def cmd_finish(args):
         sf_summary, violations = old["snowflake"], old["read_only_violations"]
         failed, unbounded = old["failed_queries"], old["account_usage_unbounded"]
         rows = json.load(open(os.path.join(run_dir, "queries.json")))
+        sf_summary = count_failures(sf_summary, failed)
     else:
         sf_summary, rows, violations, failed, unbounded = snowflake_telemetry(started, ended)
     telemetry = {
@@ -401,7 +420,8 @@ def cmd_finish(args):
         os.remove(CURRENT)
 
     passed = sum(a["pass"] for a in auto)
-    print(f"Telemetry: {sf_summary['queries']} Snowflake queries, {sf_summary['failed_queries']} failed, "
+    print(f"Telemetry: {sf_summary['queries']} Snowflake queries, {sf_summary['failed_queries']} failed "
+          f"(+{sf_summary['cortex_internal_failed']} Cortex Code internal), "
           f"~{sf_summary['est_credits_analysis']} credits, read-only violations: {sf_summary['read_only_violations']}")
     print(f"Auto checks: {passed}/{len(auto)} passed")
     for a in auto:
@@ -509,12 +529,12 @@ def build_summary():
                   + ", ".join(not_run) + "."]
 
     lines += ["", "## All runs", "",
-              "| Case | Run | Skill sha | Verdict | Auto | Manual | Read-only violations | SF queries | "
+              "| Case | Run | Skill sha | Verdict | Auto | Manual | Read-only violations | SF queries (skill failures) | "
               "Est. credits (analysis) | Wall s | Tool calls | Findings |",
               "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for meta, tel, g, rel in sorted(runs, key=lambda r: (r[0]["case"], r[0]["run_id"])):
         man = g.get("manual") or {}
-        sf, cx = tel["snowflake"], tel["cortex"]
+        sf, cx = count_failures(dict(tel["snowflake"]), tel["failed_queries"]), tel["cortex"]
         sha = f"**{meta['skill_sha']}**" if meta["skill_sha"] == current else meta["skill_sha"]
         lines.append(f"| {meta['case']} | [{meta['run_id']}]({rel}/grading.md) | {sha} | {verdict_of(g)} | "
                      f"{sum(a['pass'] for a in g['auto'])}/{len(g['auto'])} | "
