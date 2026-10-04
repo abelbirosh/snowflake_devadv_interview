@@ -18,6 +18,7 @@ part of what's graded.
 **Telemetry** (`telemetry.json`):
 - Cortex side: wall time, turns, tool calls, token counts if the transcript has them.
 - Snowflake side: every query the session ran, from `INFORMATION_SCHEMA.QUERY_HISTORY` (no lag). Counts by type, failed queries, estimated analysis credits and bytes scanned.
+  Failed queries are the skill's own; Cortex Code's internal lookups of its `CORTEX_CODE` database (2 per run) are counted separately as `cortex_internal_failed`.
 - Read-only violations: any statement that isn't `SELECT`/`SHOW`/`DESCRIBE`/`GET`/`LIST`/`USE`/`ALTER SESSION`.
 - Unbounded `ACCOUNT_USAGE` queries.
 
@@ -42,6 +43,15 @@ It must show `[PROJECT] dbt-cost-tuning`.
 ```bash
 cortex exec --no-history -c AG26866 "Run SELECT CURRENT_ROLE() and tell me the result."
 ```
+Any reply from the model means Cortex Code works for that connection's role. It will say the SQL tool is blocked:
+`cortex exec` auto-rejects tool approvals, and `--allowed sql_execute` doesn't unblock it. That's expected. Check the
+role itself with `snow sql -c <connection> -q "SELECT CURRENT_ROLE()"`; the real run asks you to approve each query.
+
+**Telemetry login.** `eval.py finish` queries Snowflake as `EVAL_ADMIN_CONN` (default `AG26866`). That connection uses
+browser OAuth, so run `finish` in your own terminal, where the login tab can open; from a non-interactive shell it times
+out. To automate it, point `EVAL_ADMIN_CONN` at a key-pair connection with the same user.
+If `finish` already ran but graded the wrong session, re-grade without querying Snowflake again:
+`eval.py finish --rerun evals/runs/<CASE>/<run> --keep-snowflake [--session <id>]`.
 
 **Connections.** Add these to `~/.snowflake/connections.toml`. Copy your `[AG26866]` block and change only what's shown:
 ```toml
@@ -87,10 +97,11 @@ cortex -c AG26866
 1. Type: **Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.**
 2. 📸 `screenshots/01-skill-loaded.png`: the prompt, the skill loading (`dbt-cost-tuning` / `SKILL.md`), and the Q0 context query.
 3. Approve read-only SQL (`SELECT`/`SHOW`/`DESCRIBE`/`GET`). **Deny anything else**, and note it in `findings.md`.
-4. 📸 `02-checkpoint.png`: project, 2-run window, capability matrix, rules to evaluate, and the frequency question.
+4. 📸 `02-checkpoint.png`: project, capability matrix, rules to evaluate, and the frequency question. (The 2-run window
+   isn't known yet: Q1 runs after the checkpoint. Check it in the plan header, screenshot 04.)
 5. Type: **Yes, that project. Skip frequency, show per run.**
 6. 📸 `03-run-in-progress.png`: Q1 (2 SUCCESS runs), the artifact `GET`, the Q3 cost output.
-7. 📸 `04-plan-top.png`: plan header, "Where the cost is", Recommendations table.
+7. 📸 `04-plan-top.png`: plan header ("Window: 2 successful runs"), "Where the cost is", Recommendations table.
 8. 📸 `05-plan-details.png`: R1 diff for `orders` + verify step, R6, "Observed, below threshold", "Not evaluable", "Assumptions", closing offer.
 9. `/exit`
 

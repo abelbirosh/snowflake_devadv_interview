@@ -16,6 +16,9 @@ touching the workflow in `SKILL.md`.
 Rules:
 - Join on `query_id`. Use source 1 whenever a row exists; fall back to source 2 per query, not per model.
 - Every model-level number carries a source label: `attributed` (100% of its queries), `estimated` (0%), or `mixed (N% attributed)`.
+- The plan header's label covers all nodes: `attributed` only if every node is 100% attributed, `estimated` only if
+  none is, otherwise `mixed (N% attributed)` with N = share of total credits from attributed queries. Models fully
+  attributed but some cache-hit tests estimated is `mixed`, not `attributed`.
 - The report states which source was used and why (e.g. "QUERY_ATTRIBUTION_HISTORY has not caught up for runs in the last ~8h").
 - Only compare models on the same basis. If one model is `attributed` and another `estimated`, rank them but flag the comparison.
 
@@ -46,7 +49,11 @@ table above and lower confidence on the estimate instead of guessing a multiplie
 - Group per `node_id` over the analysis window (default: the last 5 successful runs, or 7 days).
 - **Exclude the parent `EXECUTE DBT PROJECT` query** (`query_type = 'CALL'`). It runs for the whole build, so counting it would double-count every model's queries. With `estimated` credits, leave it out of all totals. With `attributed` credits, report it separately as dbt orchestration overhead.
 - **Python models:** the comment lands on the outer node query (a stored-procedure call), but the Snowpark query that actually writes the table (`CREATE ... TABLE <db>.<schema>.<model>`) has no comment. The outer query's time already includes that write query.
-  - Credits: for `estimated`, use the outer node query only. For `attributed`, add the outer query's credits to its children's (`QUERY_ATTRIBUTION_HISTORY.parent_query_id`). Never add the uncommented write query's estimate on top, because that double-counts.
+  - Credits depend on the source. **`estimated`:** use the outer node query only and drop the write query's credits;
+    the outer query's elapsed time already covers the write, so adding it double-counts. **`attributed`:** add the
+    write query's attributed credits to the outer query's. `QUERY_ATTRIBUTION_HISTORY` credits each query on its own
+    (a procedure's cost is the sum over its `root_query_id`), so dropping the write undercounts. Never mix the two:
+    don't add an *estimated* write query to an *attributed* outer query.
   - Metrics (rows, bytes, spill): link the uncommented `CREATE_TABLE_AS_SELECT`/`INSERT`/`MERGE` to the model by matching its target table against `relation_name` in `manifest.json`.
 - **Zero-scan executions:** a `SELECT` with `bytes_scanned = 0` was answered either from the result cache (same query, unchanged data) or from table metadata (e.g. a `not_null` check on a column whose statistics prove it). Label it `zero-scan`. For cost, use the most recent execution that did scan data, and say so: in production, data changes between runs, so the result cache usually won't apply.
   Apply this **per node and per run, before computing any share or threshold** (Q3 does it). A node that never scanned in the window keeps its actual (near-zero) cost.
@@ -88,11 +95,12 @@ Priority = Impact × (Signal / 100) ÷ Effort
 A rule **fires** only if every gate passes and Signal ≥ **60**.
 
 Signal is the sum of the rule's evidence weights that counted (§4), so every Signal must be reachable from those
-weights. Show the sum in the report, row by row. Placement:
+weights. Show the sum in the report, row by row. Each scored rule goes in exactly one section:
 
 | Signal | Section |
 |---|---|
-| ≥ 60, gates pass | Recommendations |
+| ≥ 60, gates pass, Impact ≥ 1 | Recommendations |
+| ≥ 60, gates pass, Impact < 1 | "Evaluated, didn't fire" line, as "Signal N, Impact < 1": there's nothing to save |
 | 40–59 | Observed, below threshold, naming each missing row and its weight (e.g. "remote spill +50 → 100") |
 | < 40, or a gate fails | "Evaluated, didn't fire" line |
 
@@ -136,7 +144,7 @@ Gate: `materialized = table` (full rebuild every run).
 | Evidence | Weight |
 |---|---|
 | Model is large: ≥ 10M rows or ≥ 1 GB | 30 |
-| Model reads a monotonic event timestamp or ID column (e.g. `*_ts`, `*_at`, increasing ID) | 30 |
+| Model reads a monotonic event timestamp or ID column (e.g. `*_ts`, `*_at`, increasing ID) **that survives to its grain** (it's in the output, or a GROUP BY key). A full-history aggregate per entity (e.g. one row per customer over all orders) scores 0 here | 30 |
 | A unique key is **verified** on the built model (Q6: `COUNT(*) = COUNT(DISTINCT key)`, 0 nulls, and rows written ≤ grain-table rows) | 20 |
 | SQL can be processed incrementally (no full-history window functions or aggregations without a partition key) | 20 |
 
@@ -209,13 +217,18 @@ False-positive guard: in a dev schema or a new account, nothing reads the final 
 - Never let R4 outrank R1–R3 on the same model.
 
 ### R5: Materialize a heavy view
-Gate: `materialized = view`.
+Gates: `materialized = view`, **and the view does real work** (joins or aggregations). A pass-through view
+(`SELECT *`, or selecting and renaming columns) fails the gate: materializing it adds storage and a build step and
+saves nothing, however heavy its dependents are.
 
 | Evidence | Weight |
 |---|---|
-| Dependent models together use ≥ 10% of dbt credits | 40 |
-| The view does real work (joins or aggregations, not just selecting and renaming columns) | 30 |
-| ≥ 2 downstream dependents | 30 |
+| Dependent models together use ≥ 10% of dbt credits | 60 |
+| ≥ 2 downstream dependents | 40 |
+
+Verified on Tasty Bytes: every staging view is a pass-through, so R5 fails the gate on all of them and goes on the
+"Evaluated, didn't fire" line. (With "real work" as a 30-point row instead of a gate, `raw_pos_order_header` scored
+40 + 0 + 30 = 70 and landed in Recommendations with ~0 Impact.)
 
 Savings factor: **(N − 1) / N** of the view's work, where N is the number of dependents. Effort defaults: scope 1, risk 2.
 
@@ -234,9 +247,10 @@ Savings factor: **0.7**, from a `where` filter on recent data or running the tes
 
 ## 5. Required in every report
 
-- Credit source label per model, plus a one-line explanation of the source mix.
+- Credit source label per model, plus a one-line explanation of the source mix. The header label follows §1.
 - Signal, Impact and Effort for every fired rule, and which pieces of evidence counted.
 - Rules that could not be evaluated (missing privilege, view, or history) and what's needed to enable them. Rules that were evaluated and didn't fire go on one "Evaluated, didn't fire" line instead.
+- Every section heading of the plan, with "None" under any empty one.
 - Any `unique_key` in a proposed diff has been verified with Q6, including a `delete+insert` key (nulls and distinct count). Any join fan-out found is reported under "Data-quality findings".
 - The runs actually used: if Q3 saw fewer runs than Q1 found, which ones came from Q3b (`estimated`, R2/R3 not yet evaluable).
 - If no query carries a `node_id`: say per-model attribution isn't possible, and give the `query-comment` fix.
