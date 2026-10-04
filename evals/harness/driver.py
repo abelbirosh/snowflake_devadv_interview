@@ -26,6 +26,17 @@ BASH_DENY = re.compile(CMD + r"(?:snow|dbt|cortex|sudo|curl|wget|tee)(?=\s|$)"
 QUESTION_TOOLS = {"ask_user_question", "askuserquestion", "question"}
 
 
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(\n|$)", re.S)
+QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
+
+
+def shell_skeleton(cmd):
+    """The command with heredoc bodies and quoted strings blanked, so code inside `python3 -c "..."` (like
+    `print(a > b)`) isn't read as a shell redirect or command. Writes made from inside that code are caught
+    afterwards by the run's no_repo_edits check."""
+    return QUOTED.sub("''", HEREDOC.sub("\n", cmd))
+
+
 def sql_statements(text):
     return [s for s in SQL_COMMENT.sub("\n", text + "\n").split(";") if s.strip()]
 
@@ -43,6 +54,7 @@ def decide(tool, inp, repo):
             return True, "write under a temp dir"
         return False, "file edits are out of scope for this read-only eval"
     if name == "bash":
+        resource = shell_skeleton(resource)
         if BASH_DENY.search(resource):
             return False, "command could change Snowflake, dbt or git"
         for target in re.findall(r"(?<![<>&0-9])>{1,2}\s*([^\s;&|]+)", resource):
