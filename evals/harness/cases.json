@@ -1,9 +1,44 @@
 {
-  "_doc": "Case definitions for evals/harness/eval.py. Prompts and checks mirror evals/test_matrix.md. auto checks are case-insensitive regexes run against the agent's text in the transcript; 'absent' checks must NOT match. manual checks are graded by a person in grading.md. 'no_failed_queries': true adds an auto check that the skill itself ran no failing SQL (Cortex Code's own CORTEX_CODE lookups don't count).",
+  "_doc": "Case definitions for evals/harness/eval.py. Prompts and checks mirror evals/test_matrix.md. auto checks are case-insensitive regexes run against the agent's text in the transcript; 'absent' checks must NOT match. manual checks are graded by a person in grading.md. 'no_failed_queries': true adds an auto check that the skill itself ran no failing SQL (Cortex Code's own CORTEX_CODE lookups don't count). Automation (`eval.py run`): 'suites' are named selections ({case: repeats}); 'block' orders a batch (A before B ... so runs that add dbt builds go last); 'setup.once' runs before a case's first run in a batch and 'setup.each' before every run (commands must be idempotent); 'answers' maps a regex on a Cortex picker question to the reply (default: the next prompt); 'turn_timeout_minutes' caps one agent turn.",
   "repeats": 3,
+  "turn_timeout_minutes": 20,
+  "suites": {
+    "core": {
+      "_doc": "The take-home run set (2026-10-03): TC01 x3, TC02, TC05, TC10.",
+      "cases": {
+        "TC01": 3,
+        "TC02": 1,
+        "TC05": 1,
+        "TC10": 1
+      }
+    },
+    "happy": {
+      "_doc": "Happy paths only, one run each.",
+      "cases": {
+        "TC01": 1,
+        "TC02": 1
+      }
+    },
+    "full": {
+      "_doc": "Every case in test_matrix.md, 3x each.",
+      "cases": {
+        "TC01": 3,
+        "TC02": 3,
+        "TC03": 3,
+        "TC04": 3,
+        "TC05": 3,
+        "TC06": 3,
+        "TC07": 3,
+        "TC08": 3,
+        "TC09": 3,
+        "TC10": 3
+      }
+    }
+  },
   "cases": {
     "TC01": {
       "type": "happy",
+      "block": "A",
       "connection": "AG26866",
       "prompts": [
         "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
@@ -52,6 +87,7 @@
     },
     "TC02": {
       "type": "happy",
+      "block": "A",
       "connection": "AG26866",
       "prompts": [
         "Our dbt build runs daily and credits are creeping up. Find the expensive dbt models and give me an optimization plan.",
@@ -80,7 +116,14 @@
     },
     "TC03": {
       "type": "failure",
+      "block": "B",
       "connection": "AG26866_NOWH",
+      "connection_setup": "Copy the [AG26866] block and delete its warehouse line.",
+      "setup": {
+        "once": [
+          "bash evals/setup/03_optional_cases.sh tc03"
+        ]
+      },
       "prompts": [
         "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan."
       ],
@@ -95,7 +138,14 @@
     },
     "TC04": {
       "type": "failure",
+      "block": "B",
       "connection": "AG26866_NOPROJECT",
+      "connection_setup": "Copy the [AG26866] block, set role = \"DBT_TUNING_EVAL_NOPROJECT\", drop database/schema lines.",
+      "setup": {
+        "once": [
+          "snow sql -c AG26866 -f evals/setup/01_restricted_roles.sql"
+        ]
+      },
       "prompts": [
         "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan."
       ],
@@ -113,7 +163,16 @@
     },
     "TC05": {
       "type": "failure",
+      "block": "B",
       "connection": "AG26866_RESTRICTED",
+      "setup": {
+        "once": [
+          "snow sql -c AG26866 -f evals/setup/01_restricted_roles.sql",
+          "python3 evals/setup/00_add_eval_connection.py"
+        ]
+      },
+      "setup_creates_connection": true,
+      "run_before": "2026-10-09",
       "prompts": [
         "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
         "Yes, that project."
@@ -137,7 +196,13 @@
     },
     "TC06": {
       "type": "edge",
+      "block": "D",
       "connection": "AG26866",
+      "setup": {
+        "each": [
+          "bash evals/setup/03_optional_cases.sh tc06"
+        ]
+      },
       "prompts": [
         "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
         "Yes, that project."
@@ -154,7 +219,13 @@
     },
     "TC07": {
       "type": "failure",
+      "block": "C",
       "connection": "AG26866",
+      "setup": {
+        "once": [
+          "bash evals/setup/03_optional_cases.sh tc07"
+        ]
+      },
       "prompts": [
         "Give me a dbt tuning plan for TASTY_BYTES_DBT_FAIL.",
         "Yes, that project. Skip frequency, show per run."
@@ -172,7 +243,13 @@
     },
     "TC08": {
       "type": "edge",
+      "block": "C",
       "connection": "AG26866",
+      "setup": {
+        "once": [
+          "bash evals/setup/02_no_comments_project.sh"
+        ]
+      },
       "prompts": [
         "Give me a dbt tuning plan for TASTY_BYTES_DBT_NOCOMMENT.",
         "Yes, that project. Skip frequency, show per run."
@@ -190,6 +267,7 @@
     },
     "TC09": {
       "type": "edge",
+      "block": "C",
       "connection": "AG26866",
       "prompts": [
         "Which dbt models cost the most? Give me a dbt tuning plan."
@@ -205,6 +283,7 @@
     },
     "TC10": {
       "type": "guardrail",
+      "block": "A",
       "connection": "AG26866",
       "prompts": [
         "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
