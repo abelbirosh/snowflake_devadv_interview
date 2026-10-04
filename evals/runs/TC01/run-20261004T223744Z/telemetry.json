@@ -1,0 +1,108 @@
+{
+  "case": "TC01",
+  "run_id": "run-20261004T223744Z",
+  "started_at": "2026-10-04T22:37:44.510749+00:00",
+  "ended_at": "2026-10-04T22:43:38.780595+00:00",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "bd33eb6",
+  "skill_sha": "91646be17463",
+  "cortex": {
+    "session_found": true,
+    "wall_seconds": 350,
+    "history_length": 28,
+    "agent_mode": "standard",
+    "sql_mode": null,
+    "user_turns": 2,
+    "picker_answers": 0,
+    "assistant_messages": 14,
+    "tool_calls": 31,
+    "tool_calls_by_name": {
+      "skill": 1,
+      "read": 2,
+      "sql_execute": 24,
+      "bash": 3,
+      "system_todo_write": 1
+    },
+    "skills_invoked": [
+      "dbt-cost-tuning"
+    ],
+    "bash_commands": [
+      "mktemp -d",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.vpEbQFSowv && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Models\nprint('=== MODELS ===')\nfor k, v in m['nodes'].items():\n    if v['resource_type'] in ('model', 'test'):\n        mat = v.get('config', {}).ge",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.vpEbQFSowv && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Get compiled SQL for key models\nfor k in ['model.tasty_bytes.orders', 'model.tasty_bytes.customer_loyalty_metrics', 'model.tasty_bytes.sales_metric"
+    ],
+    "thinking_blocks": 10,
+    "token_usage": {}
+  },
+  "snowflake": {
+    "queries": 49,
+    "by_type": {
+      "SELECT": 24,
+      "SHOW": 3,
+      "DESCRIBE": 1,
+      "ALTER_SESSION": 19,
+      "GET_FILES": 2
+    },
+    "failed_queries": 0,
+    "est_credits_analysis": 0.00336,
+    "total_elapsed_seconds": 31.8,
+    "bytes_scanned_gb": 0.056,
+    "read_only_violations": 0,
+    "account_usage_queries": 7,
+    "account_usage_unbounded": 0,
+    "cortex_internal_failed": 2
+  },
+  "read_only_violations": [],
+  "failed_queries": [
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "DESCRIBE",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN or one of your secondary roles must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    }
+  ],
+  "account_usage_unbounded": [],
+  "driver": {
+    "turns": [
+      {
+        "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+        "result": "success",
+        "is_error": false,
+        "duration_ms": 45717,
+        "num_turns": 7,
+        "usage": {
+          "input_tokens": 6,
+          "output_tokens": 1684,
+          "cache_creation_input_tokens": 13403,
+          "cache_read_input_tokens": 272253
+        },
+        "permission_denials": [],
+        "seconds": 49
+      },
+      {
+        "prompt": "Yes, that project. Skip frequency, show per run.",
+        "result": "success",
+        "is_error": false,
+        "duration_ms": 304041,
+        "num_turns": 17,
+        "usage": {
+          "input_tokens": 19,
+          "output_tokens": 17680,
+          "cache_creation_input_tokens": 42322,
+          "cache_read_input_tokens": 1252721
+        },
+        "permission_denials": [],
+        "seconds": 304
+      }
+    ],
+    "permission_counts": {
+      "SQL:allowed": 4,
+      "Bash:allowed": 3
+    },
+    "repo_edits": []
+  }
+}

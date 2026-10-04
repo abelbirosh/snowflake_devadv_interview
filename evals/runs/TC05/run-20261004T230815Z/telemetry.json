@@ -1,0 +1,145 @@
+{
+  "case": "TC05",
+  "run_id": "run-20261004T230815Z",
+  "started_at": "2026-10-04T23:08:15.382011+00:00",
+  "ended_at": "2026-10-04T23:14:26.312784+00:00",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "bd33eb6",
+  "skill_sha": "91646be17463",
+  "cortex": {
+    "session_found": true,
+    "wall_seconds": 363,
+    "history_length": 34,
+    "agent_mode": "standard",
+    "sql_mode": null,
+    "user_turns": 2,
+    "picker_answers": 0,
+    "assistant_messages": 17,
+    "tool_calls": 35,
+    "tool_calls_by_name": {
+      "skill": 1,
+      "sql_execute": 25,
+      "read": 2,
+      "bash": 5,
+      "system_todo_write": 2
+    },
+    "skills_invoked": [
+      "dbt-cost-tuning"
+    ],
+    "bash_commands": [
+      "mktemp -d",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Models\nprint('=== MODELS ===')\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'model':\n        cfg = n.get('config', {})\n",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'model' and n.get('config', {}).get('materialized') == 'table':\n        prin",
+      "python3 << 'PYEOF'\nimport json\n\n# Small warehouse = 2 credits/hr\nWH_CREDITS = {\"Small\": 2, \"X-Small\": 1, \"Medium\": 4, \"Large\": 8}\n\ndef credits_est(exec_time_ms, wh_size):\n    if wh_size is None or exec_time_ms is None:\n        return 0\n    rate = WH_CREDITS.get(wh_size, 2)\n    return exec_time_ms / ",
+      "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'model' and n.get('config',{}).get('materialized') == 'view':\n        sql = (n"
+    ],
+    "thinking_blocks": 13,
+    "token_usage": {}
+  },
+  "snowflake": {
+    "queries": 54,
+    "by_type": {
+      "SELECT": 25,
+      "SHOW": 3,
+      "DESCRIBE": 1,
+      "ALTER_SESSION": 23,
+      "GET_FILES": 2
+    },
+    "failed_queries": 7,
+    "est_credits_analysis": 0.01651,
+    "total_elapsed_seconds": 38.1,
+    "bytes_scanned_gb": 36.57,
+    "read_only_violations": 0,
+    "account_usage_queries": 4,
+    "account_usage_unbounded": 0,
+    "cortex_internal_failed": 2
+  },
+  "read_only_violations": [],
+  "failed_queries": [
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "DESCRIBE",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nDatabase 'CORTEX_CODE' does not exist or not authorized. Your primary role ACCOUNTADMIN must have USAGE or any other privilege granted on DATABASE CORTEX_CODE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'SNOWFLAKE.ACCOUNT_USAGE' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA SNOWFLAKE.ACCOUNT_USAGE."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW."
+    },
+    {
+      "query_type": "SELECT",
+      "error_code": 2003,
+      "error_message": "SQL compilation error:\nSchema 'TASTY_BYTES_DBT_DB.RAW' does not exist or not authorized. Your primary role DBT_TUNING_EVAL_RESTRICTED must have USAGE or any other privilege granted on SCHEMA TASTY_BYTES_DBT_DB.RAW."
+    }
+  ],
+  "account_usage_unbounded": [],
+  "driver": {
+    "turns": [
+      {
+        "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+        "result": "success",
+        "is_error": false,
+        "duration_ms": 48914,
+        "num_turns": 9,
+        "usage": {
+          "input_tokens": 7,
+          "output_tokens": 2123,
+          "cache_creation_input_tokens": 83333,
+          "cache_read_input_tokens": 259123
+        },
+        "permission_denials": [],
+        "seconds": 54
+      },
+      {
+        "prompt": "Yes, that project.",
+        "result": "success",
+        "is_error": false,
+        "duration_ms": 314400,
+        "num_turns": 21,
+        "usage": {
+          "input_tokens": 23,
+          "output_tokens": 18326,
+          "cache_creation_input_tokens": 127598,
+          "cache_read_input_tokens": 1622603
+        },
+        "permission_denials": [],
+        "seconds": 314
+      }
+    ],
+    "permission_counts": {
+      "SQL:allowed": 4,
+      "Bash:allowed": 5
+    },
+    "repo_edits": []
+  }
+}

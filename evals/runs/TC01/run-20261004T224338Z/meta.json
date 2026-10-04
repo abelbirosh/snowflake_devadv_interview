@@ -1,0 +1,18 @@
+{
+  "case": "TC01",
+  "type": "happy",
+  "run_id": "run-20261004T224338Z",
+  "mode": "auto",
+  "batch": "batch-20261004T223744Z",
+  "started_at": "2026-10-04T22:43:38.783154+00:00",
+  "connection": "<REDACTED>",
+  "cortex_version": "Cortex Code v1.1.87",
+  "git_sha": "bd33eb6",
+  "skill_sha": "91646be17463",
+  "prompts": [
+    "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+    "Yes, that project. Skip frequency, show per run."
+  ],
+  "session_id": "8cad5524-5c45-4f86-b560-75d5398353fd",
+  "ended_at": "2026-10-04T22:50:03.108212+00:00"
+}

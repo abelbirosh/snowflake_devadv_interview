@@ -1,0 +1,115 @@
+{
+  "session_id": "8cad5524-5c45-4f86-b560-75d5398353fd",
+  "turns": [
+    {
+      "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 39616,
+      "num_turns": 7,
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1700,
+        "cache_creation_input_tokens": 82948,
+        "cache_read_input_tokens": 202606
+      },
+      "permission_denials": [],
+      "seconds": 43
+    },
+    {
+      "prompt": "Yes, that project. Skip frequency, show per run.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 339543,
+      "num_turns": 16,
+      "usage": {
+        "input_tokens": 29,
+        "output_tokens": 21807,
+        "cache_creation_input_tokens": 173848,
+        "cache_read_input_tokens": 1334013
+      },
+      "permission_denials": [],
+      "seconds": 340
+    }
+  ],
+  "permission_counts": {
+    "SQL:allowed": 4,
+    "Bash:allowed": 3,
+    "Read:allowed": 1
+  },
+  "permissions": [
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SHOW DBT PROJECTS IN ACCOUNT /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SELECT SYSTEM$LOCATE_DBT_ARTIFACTS('01c77799-0208-bb91-0011-5b5200022262') /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "mktemp -d"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/manifest.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.aLruXp9Rt7/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/run_results.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.aLruXp9Rt7/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Read",
+      "allowed": true,
+      "reason": "read-only tool",
+      "input": {
+        "action": "file_read",
+        "resource": "/private/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.aLruXp9Rt7/manifest.json"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 -c \"\nimport json\nwith open('/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.aLruXp9Rt7/manifest.json') as f:\n    m = json.load(f)\nnode = m['nodes']['model.tasty_bytes.orders']\nprint('=== original_file_path ===')\nprint(node.get('original_file_path'))\nprint()\nprint('=== compiled_code (first 2000 chars) ===')\ncc = node.get('compiled_code', '') or ''\nprint(cc[:2000])\nprint()\nprint('=== raw_code (first 1000 chars) ===')\nrc = node.get('raw_code', '') or ''\nprint(rc[:1000])\n\"\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 -c \"\nimport json\nwith open('/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.aLruXp9Rt7/manifest.json') as f:\n    m = json.load(f)\nnode = m['nodes']['model.tasty_bytes.customer_loyalty_metrics']\nprint('=== compiled_code ===')\nprint(node.get('compiled_code', '')[:1500])\n\"\n"
+      }
+    }
+  ],
+  "repo_edits": []
+}
