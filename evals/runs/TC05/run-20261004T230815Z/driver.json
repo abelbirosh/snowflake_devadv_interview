@@ -1,0 +1,123 @@
+{
+  "session_id": "9e32f9ae-b86e-4bda-a4fc-94a883ab03c2",
+  "turns": [
+    {
+      "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 48914,
+      "num_turns": 9,
+      "usage": {
+        "input_tokens": 7,
+        "output_tokens": 2123,
+        "cache_creation_input_tokens": 83333,
+        "cache_read_input_tokens": 259123
+      },
+      "permission_denials": [],
+      "seconds": 54
+    },
+    {
+      "prompt": "Yes, that project.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 314400,
+      "num_turns": 21,
+      "usage": {
+        "input_tokens": 23,
+        "output_tokens": 18326,
+        "cache_creation_input_tokens": 127598,
+        "cache_read_input_tokens": 1622603
+      },
+      "permission_denials": [],
+      "seconds": 314
+    }
+  ],
+  "permission_counts": {
+    "SQL:allowed": 4,
+    "Bash:allowed": 5
+  },
+  "permissions": [
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SHOW DBT PROJECTS IN ACCOUNT /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SELECT SYSTEM$LOCATE_DBT_ARTIFACTS('01c77799-0208-bb91-0011-5b5200022262') /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "mktemp -d"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/manifest.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/run_results.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Models\nprint('=== MODELS ===')\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'model':\n        cfg = n.get('config', {})\n        print(f\\\"  {k}: materialized={cfg.get('materialized')}, relation={n.get('relation_name')}, unique_key={cfg.get('unique_key')}, cluster_by={cfg.get('cluster_by')}, file={n.get('original_file_path')}\\\")\n        deps = n.get('depends_on', {}).get('nodes', [])\n        print(f\\\"    depends_on: {deps}\\\")\n\nprint()\nprint('=== SOURCES ===')\nfor k, s in m.get('sources', {}).items():\n    print(f\\\"  {k}: relation={s.get('relation_name')}\\\")\n\nprint()\nprint('=== TESTS ===')\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'test':\n        cfg = n.get('config', {})\n        deps = n.get('depends_on', {}).get('nodes', [])\n        print(f\\\"  {k}: test_metadata={n.get('test_metadata',{}).get('name')}, depends_on={deps}\\\")\n\nprint()\nprint('=== CHILD MAP (excerpt) ===')\ncm = m.get('child_map', {})\nfor k in list(cm.keys())[:30]:\n    if cm[k]:\n        print(f\\\"  {k}: {cm[k]}\\\")\n\nprint()\nprint('=== EXPOSURES ===')\nfor k, e in m.get('exposures', {}).items():\n    print(f\\\"  {k}: {e.get('name')}\\\")\n\"\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'model' and n.get('config', {}).get('materialized') == 'table':\n        print(f'=== {k} (file: {n.get(\\\"original_file_path\\\")}) ===')\n        print(f'Language: {n.get(\\\"language\\\", \\\"sql\\\")}')\n        print(f'Compiled SQL:')\n        sql = n.get('compiled_code') or n.get('raw_code', '')\n        print(sql[:3000])\n        print()\n\"\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 << 'PYEOF'\nimport json\n\n# Small warehouse = 2 credits/hr\nWH_CREDITS = {\"Small\": 2, \"X-Small\": 1, \"Medium\": 4, \"Large\": 8}\n\ndef credits_est(exec_time_ms, wh_size):\n    if wh_size is None or exec_time_ms is None:\n        return 0\n    rate = WH_CREDITS.get(wh_size, 2)\n    return exec_time_ms / 3600000 * rate\n\n# Run 1 data (most recent): node_id, target_relation, query_type, warehouse_size, execution_time, bytes_scanned, rows_inserted\nrun1 = [\n    (\"model.tasty_bytes.orders\", None, \"CTAS\", \"Small\", 162008, 5176506880, 693681576),\n    (\"model.tasty_bytes.sales_metrics_by_location\", None, \"CALL\", \"Small\", 13883, 0, 0),\n    (None, \"tasty_bytes_dbt_db.dev.sales_metrics_by_location\", \"CTAS\", \"Small\", 1829, 2182782976, 13093),\n    (\"model.tasty_bytes.customer_loyalty_metrics\", None, \"CTAS\", \"Small\", 9817, 2192766976, 222540),\n    # Relationship test - all zero-scan in run 1\n    (\"test.tasty_bytes.source_relationships_tb_101_ORDER_DETAIL_ORDER_ID__ORDER_ID__source_tb_101_ORDER_HEADER_.69e1cb68b4\", None, \"SELECT\", None, 99, 0, 0),\n    (\"test.tasty_bytes.source_relationships_tb_101_ORDER_HEADER_TRUCK_ID__TRUCK_ID__source_tb_101_TRUCK_.b808016767\", None, \"SELECT\", None, 114, 0, 0),\n    (\"test.tasty_bytes.source_relationships_tb_101_ORDER_HEADER_LOCATION_ID__LOCATION_ID__source_tb_101_LOCATION_.0dfde68927\", None, \"SELECT\", None, 82, 0, 0),\n    (\"test.tasty_bytes.source_relationships_tb_101_TRUCK_FRANCHISE_ID__FRANCHISE_ID__source_tb_101_FRANCHISE_.6f47b4eb9b\", None, \"SELECT\", None, 80, 0, 0),\n]\n\nrun2 = [\n    (\"model.tasty_bytes.orders\", None, \"CTAS\", \"Small\", 177799, 5176506880, 693681576),\n    (\"model.tasty_bytes.sales_metrics_by_location\", None, \"CALL\", \"Small\", 13731, 0, 0),\n    (None, \"tasty_bytes_dbt_db.dev.sales_metrics_by_location\", \"CTAS\", \"Small\", 1798, 2182782976, 13093),\n    (\"model.tasty_bytes.customer_loyalty_metrics\", None, \"CTAS\", \"Small\", 9610, 2192766976, 222540),\n    # Relationship tests with actual scans in run 2\n    (\"test.tasty_bytes.source_relationships_tb_101_ORDER_DETAIL_ORDER_ID__ORDER_ID__source_tb_101_ORDER_HEADER_.69e1cb68b4\", None, \"SELECT\", \"Small\", 10968, 5165468160, 0),\n    (\"test.tasty_bytes.source_relationships_tb_101_ORDER_HEADER_TRUCK_ID__TRUCK_ID__source_tb_101_TRUCK_.b808016767\", None, \"SELECT\", \"Small\", 836, 2182106112, 0),\n    (\"test.tasty_bytes.source_relationships_tb_101_ORDER_HEADER_LOCATION_ID__LOCATION_ID__source_tb_101_LOCATION_.0dfde68927\", None, \"SELECT\", \"Small\", 1084, 2182435840, 0),\n    (\"test.tasty_bytes.source_relationships_tb_101_TRUCK_FRANCHISE_ID__FRANCHISE_ID__source_tb_101_FRANCHISE_.6f47b4eb9b\", None, \"SELECT\", \"Small\", 244, 22016, 0),\n]\n\n# Also include minor tests (not_null, unique, is_positive_amount) from run 2 that scanned\n# Run 2 small tests with scans (many have bytes_scanned > 0 in run 2)\nminor_tests_r2 = [\n    (\"test.tasty_bytes.source_unique_tb_101_MENU_MENU_ID.2aa1dd0884\", \"Small\", 158, 8704),\n    (\"test.tasty_bytes.source_unique_tb_101_TRUCK_TRUCK_ID.816c3dd352\", \"Small\", 84, 8704),\n    (\"test.tasty_bytes.source_unique_tb_101_LOCATION_PLACEKEY.d954d017f0\", \"Small\", 166, 338432),\n    (\"test.tasty_bytes.source_unique_tb_101_LOCATION_LOCATION_ID.a3adc0821c\", \"Small\", 97, 338432),\n    (\"test.tasty_bytes.source_is_positive_amount_tb_101_COUNTRY_CITY_POPULATION.130bd567d8\", \"Small\", 160, 2048),\n]\n\n# Node aggregation: for each node, across both runs:\n# - If Python model write (target_relation matches): drop credits (estimated path)\n# - Zero-scan costing: use most recent scanning run's credits\n\n# Step 1: compute per-node per-run credits\nnodes = {}  # node -> {run_idx: {credits, bytes_scanned, rows_inserted, exec_time}}\n\ndef add_entry(node_id, target_rel, qtype, wh, exec_ms, bytes_s, rows, run_idx):\n    # Determine node name\n    if node_id:\n        node = node_id\n    elif target_rel:\n        node = f\"unattributed:{target_rel}\"\n    else:\n        node = \"unattributed:SELECT\"\n        return  # skip session setup selects\n    \n    c = credits_est(exec_ms, wh)\n    if node not in nodes:\n        nodes[node] = {}\n    if run_idx not in nodes[node]:\n        nodes[node][run_idx] = {\"credits\": 0, \"bytes_scanned\": 0, \"rows_inserted\": 0, \"exec_time_ms\": 0}\n    nodes[node][run_idx][\"credits\"] += c\n    nodes[node][run_idx][\"bytes_scanned\"] += bytes_s\n    nodes[node][run_idx][\"rows_inserted\"] += rows\n    nodes[node][run_idx][\"exec_time_ms\"] += exec_ms\n\nfor r in run1:\n    add_entry(r[0], r[1], r[2], r[3], r[4], r[5], r[6], 0)\nfor r in run2:\n    add_entry(r[0], r[1], r[2], r[3], r[4], r[5], r[6], 1)\nfor t in minor_tests_r2:\n    add_entry(t[0], None, \"SELECT\", t[1], t[2], t[3], 0, 1)\n\n# Handle Python model (sales_metrics_by_location):\n# The write query is unattributed:tasty_bytes_dbt_db.dev.sales_metrics_by_location\n# Since estimated credits, DROP the write query's credits. Keep its rows/bytes on the model.\npy_write_key = \"unattributed:tasty_bytes_dbt_db.dev.sales_metrics_by_location\"\npy_model_key = \"model.tasty_bytes.sales_metrics_by_location\"\nif py_write_key in nodes and py_model_key in nodes:\n    for run_idx in nodes[py_write_key]:\n        wr = nodes[py_write_key][run_idx]\n        if run_idx in nodes[py_model_key]:\n            # Move rows/bytes to model, drop credits\n            nodes[py_model_key][run_idx][\"rows_inserted\"] += wr[\"rows_inserted\"]\n            nodes[py_model_key][run_idx][\"bytes_scanned\"] += wr[\"bytes_scanned\"]\n    del nodes[py_write_key]\n\n# Zero-scan costing\nfor node, runs in nodes.items():\n    # Find most recent scanning run\n    last_scan_credits = None\n    for ridx in sorted(runs.keys()):  # 0=most recent, 1=older\n        if runs[ridx][\"bytes_scanned\"] > 0:\n            last_scan_credits = runs[ridx][\"credits\"]\n            break\n    # For runs with bytes_scanned=0, use last_scan_credits\n    for ridx in runs:\n        if runs[ridx][\"bytes_scanned\"] == 0 and last_scan_credits is not None:\n            runs[ridx][\"credits\"] = last_scan_credits\n\n# Compute per-node averages\nresults = []\nfor node, runs in sorted(nodes.items()):\n    avg_credits = sum(r[\"credits\"] for r in runs.values()) / len(runs)\n    avg_time = sum(r[\"exec_time_ms\"] for r in runs.values()) / len(runs) / 1000\n    max_rows = max(r[\"rows_inserted\"] for r in runs.values())\n    zero_scan_count = sum(1 for r in runs.values() if r[\"bytes_scanned\"] == 0)\n    results.append((node, avg_credits, avg_time, max_rows, zero_scan_count, len(runs)))\n\n# Sort by credits desc\nresults.sort(key=lambda x: -x[1])\n\ntotal_credits = sum(r[1] for r in results)\nprint(f\"Total estimated credits/run: {total_credits:.5f}\")\nprint()\nprint(f\"{'Node':<90} {'Cr/run':>10} {'Share%':>7} {'AvgSec':>8} {'Rows':>15} {'ZeroScan':>9}\")\nprint(\"-\" * 142)\nfor node, cr, t, rows, zs, nruns in results:\n    share = cr / total_credits * 100 if total_credits > 0 else 0\n    zs_note = f\"({zs} of {nruns})\" if zs > 0 else \"\"\n    print(f\"{node:<90} {cr:>10.5f} {share:>6.1f}% {t:>7.1f}s {rows:>15,} {zs_note:>9}\")\n\nPYEOF\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "cd /var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.KERpeCEJcU && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\nfor k, n in m.get('nodes', {}).items():\n    if n.get('resource_type') == 'model' and n.get('config',{}).get('materialized') == 'view':\n        sql = (n.get('compiled_code') or n.get('raw_code',''))[:300]\n        print(f'{k}: {sql}')\n        print()\n# Also check child_map for orders\ncm = m.get('child_map', {})\nprint('child_map for orders:', cm.get('model.tasty_bytes.orders', []))\nprint('child_map for customer_loyalty_metrics:', cm.get('model.tasty_bytes.customer_loyalty_metrics', []))\nprint('child_map for sales_metrics_by_location:', cm.get('model.tasty_bytes.sales_metrics_by_location', []))\n\"\n"
+      }
+    }
+  ],
+  "repo_edits": []
+}

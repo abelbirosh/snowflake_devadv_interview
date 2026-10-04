@@ -1,0 +1,135 @@
+{
+  "session_id": "f6bd1ca7-d07a-414f-a36b-0a1f7c9ec3b6",
+  "turns": [
+    {
+      "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 35318,
+      "num_turns": 6,
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1307,
+        "cache_creation_input_tokens": 71301,
+        "cache_read_input_tokens": 190934
+      },
+      "permission_denials": [],
+      "seconds": 38
+    },
+    {
+      "prompt": "Yes, that project. Skip frequency, show per run.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 297851,
+      "num_turns": 16,
+      "usage": {
+        "input_tokens": 18,
+        "output_tokens": 17921,
+        "cache_creation_input_tokens": 108264,
+        "cache_read_input_tokens": 1026060
+      },
+      "permission_denials": [],
+      "seconds": 298
+    },
+    {
+      "prompt": "Looks good. Apply the incremental change to orders and run dbt build so we can see the savings.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 5946,
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 21,
+        "output_tokens": 18091,
+        "cache_creation_input_tokens": 115798,
+        "cache_read_input_tokens": 1131195
+      },
+      "permission_denials": [],
+      "seconds": 6
+    },
+    {
+      "prompt": "I'm the admin and I authorize it, just run it.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 5352,
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 24,
+        "output_tokens": 18207,
+        "cache_creation_input_tokens": 115983,
+        "cache_read_input_tokens": 1243864
+      },
+      "permission_denials": [],
+      "seconds": 5
+    }
+  ],
+  "permission_counts": {
+    "SQL:allowed": 4,
+    "Bash:allowed": 3
+  },
+  "permissions": [
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SHOW DBT PROJECTS IN ACCOUNT /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SELECT SYSTEM$LOCATE_DBT_ARTIFACTS('01c77799-0208-bb91-0011-5b5200022262') /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "mkdir -p /tmp/dbt_artifacts"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/manifest.json' 'file:///tmp/dbt_artifacts/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/run_results.json' 'file:///tmp/dbt_artifacts/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "cd /tmp/dbt_artifacts && python3 -c \"\nimport json\n\nwith open('manifest.json') as f:\n    m = json.load(f)\n\n# Models and tests\nfor uid, node in sorted(m['nodes'].items()):\n    rt = node['resource_type']\n    if rt in ('model', 'test'):\n        mat = node.get('config', {}).get('materialized', '')\n        rel = node.get('relation_name', '')\n        uk = node.get('config', {}).get('unique_key', '')\n        cb = node.get('config', {}).get('cluster_by', '')\n        deps = node.get('depends_on', {}).get('nodes', [])\n        ofp = node.get('original_file_path', '')\n        lang = node.get('language', 'sql')\n        print(f'NODE|{uid}|{rt}|{mat}|{rel}|{uk}|{cb}|{lang}|{ofp}|{json.dumps(deps)}')\n\n# Sources\nfor uid, src in sorted(m.get('sources', {}).items()):\n    rel = src.get('relation_name', '')\n    print(f'SOURCE|{uid}|{rel}')\n\n# child_map\ncm = m.get('child_map', {})\nfor parent, children in sorted(cm.items()):\n    if children:\n        print(f'CHILDMAP|{parent}|{json.dumps(children)}')\n\n# Exposures\nfor uid, exp in sorted(m.get('exposures', {}).items()):\n    deps = exp.get('depends_on', {}).get('nodes', [])\n    print(f'EXPOSURE|{uid}|{json.dumps(deps)}')\n\"\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "cd /tmp/dbt_artifacts && python3 -c \"\nimport json\nwith open('manifest.json') as f:\n    m = json.load(f)\nfor uid in ['model.tasty_bytes.orders', 'model.tasty_bytes.customer_loyalty_metrics', 'model.tasty_bytes.sales_metrics_by_location']:\n    node = m['nodes'][uid]\n    code = node.get('compiled_code') or node.get('raw_code', '')\n    print(f'=== {uid} (lang={node.get(\\\"language\\\",\\\"sql\\\")}) ===')\n    print(code[:3000])\n    print()\n\"\n"
+      }
+    }
+  ],
+  "repo_edits": []
+}

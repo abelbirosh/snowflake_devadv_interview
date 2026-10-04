@@ -1,0 +1,29 @@
+{
+  "batch": "batch-20261004T223744Z",
+  "selection": [
+    [
+      "TC01",
+      3
+    ],
+    [
+      "TC02",
+      1
+    ],
+    [
+      "TC10",
+      1
+    ],
+    [
+      "TC05",
+      1
+    ]
+  ],
+  "runs": [
+    "evals/runs/TC01/run-20261004T223744Z",
+    "evals/runs/TC01/run-20261004T224338Z",
+    "evals/runs/TC01/run-20261004T225003Z",
+    "evals/runs/TC02/run-20261004T225617Z",
+    "evals/runs/TC10/run-20261004T230203Z",
+    "evals/runs/TC05/run-20261004T230815Z"
+  ]
+}

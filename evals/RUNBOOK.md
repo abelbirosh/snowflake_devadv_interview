@@ -5,7 +5,40 @@ non-deterministic, so a case's result is its pass rate across runs, not one samp
 skill itself still keeps *its own* analysis queries bounded (SKILL.md guardrail 3), because that's product behaviour and
 part of what's graded.
 
-**Every run goes through the harness.** It saves and pushes telemetry, grading and findings:
+**Every run goes through the harness.** It saves and pushes telemetry, grading and findings. There are two ways to
+use it.
+
+### Automated (default): say which evals, the harness runs them
+
+```bash
+python3 evals/harness/eval.py run --suite core          # TC01 x3, TC02, TC10, TC05
+```
+```bash
+python3 evals/harness/eval.py run TC01x3 TC10           # any cases; xN = repeats
+```
+Add `--dry-run` to see the plan and preflight checks without running anything.
+
+What it does:
+1. **Plans** the selection: suites and cases come from [`harness/cases.json`](harness/cases.json), sorted into the
+   block order below (so runs that add dbt builds go last), and **preflights** it: skill visible, connections
+   present, no manual run in progress, `run_before` dates. Then it asks `Start? [y/N]` (`--yes` skips that).
+2. **Runs each case's setup** (`setup.once` before its first run, `setup.each` before every run; `--skip-setup` skips them).
+3. **Drives Cortex Code headlessly**, one run at a time (`cortex --input-format stream-json`, with a fixed
+   `--session-id`, from the repo root so the project skill loads). It types the case's prompts one turn at a time and
+   answers tool approvals the way this runbook tells a person to ([`harness/driver.py`](harness/driver.py)): read-only
+   SQL and read-only shell are approved; SQL that writes, file edits outside a temp dir, and `snow`/`dbt`/`git` writes
+   are denied. If the skill asks with Cortex's question picker, the harness answers with the case's `answers` entry or
+   else the next prompt. Every decision goes into the run's `driver.json`.
+4. After the last run it makes **one** Snowflake telemetry query for the whole batch (so only one OAuth login), splits it
+   by each run's time window, auto-grades every run, rebuilds `results.md`, and does **one commit + push**. If the
+   login fails, the sessions are kept: finish with `eval.py finish-batch evals/runs/batches/<batch>.json`.
+5. You tick the manual checks in each `grading.md`, write `findings.md`, then
+   `python3 evals/harness/eval.py publish --batch evals/runs/batches/<batch>.json`.
+
+Automated runs get two extra auto checks: `session_completed` (no turn timed out) and `no_repo_edits` (`git status`
+unchanged outside `evals/runs/`). There are no screenshots, so use the manual mode when you need them.
+
+### Manual (for screenshots)
 
 | Step | Command | Saves + pushes |
 |---|---|---|

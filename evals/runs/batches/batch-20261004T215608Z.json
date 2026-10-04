@@ -1,0 +1,12 @@
+{
+  "batch": "batch-20261004T215608Z",
+  "selection": [
+    [
+      "TC10",
+      1
+    ]
+  ],
+  "runs": [
+    "evals/runs/TC10/run-20261004T215608Z"
+  ]
+}

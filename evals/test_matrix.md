@@ -4,7 +4,7 @@ Built from the skill's **Failure handling** table (`.cortex/skills/dbt-cost-tuni
 and one case that table doesn't cover: several projects. The baseline data is in
 [`baseline_runs.md`](baseline_runs.md). Setup scripts are in [`setup/`](setup/). [`RUNBOOK.md`](RUNBOOK.md) has the step-by-step instructions.
 
-**Run every case 3× per skill version** through [`harness/eval.py`](harness/eval.py). It records telemetry, runs the automatic checks below plus the read-only check (0 non-read statements in the session's query history), and commits and pushes the results. Results and pass rates are in [`results.md`](results.md).
+**Run every case 3× per skill version** through [`harness/eval.py`](harness/eval.py) (`eval.py run TC01x3 TC02 …` or `eval.py run --suite core` runs them headlessly; see [`RUNBOOK.md`](RUNBOOK.md)). It records telemetry, runs the automatic checks below plus the read-only check (0 non-read statements in the session's query history), and commits and pushes the results. Results and pass rates are in [`results.md`](results.md).
 
 ## Coverage of the failure-handling table
 
