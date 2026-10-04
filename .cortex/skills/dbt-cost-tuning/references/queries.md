@@ -10,8 +10,16 @@ Every query here is read-only. Replace the placeholders with values found in Pha
 | `<N_RUNS>` | Successful runs to analyze | `5` |
 | `<DAYS>` | Look-back window for reads | `30` |
 | `<MODEL_RELATION>` / `<KEY>` | A model's `relation_name` and the key to check (Q6) | `TASTY_BYTES_DBT_DB.DEV.ORDERS` / `ORDER_DETAIL_ID` |
+| `<DIM_RELATION>` | A joined model's or **source's** `relation_name` from the manifest (`nodes` or `sources`) | `tasty_bytes_dbt_db.RAW.FRANCHISE` |
 
 Always bound `ACCOUNT_USAGE` queries by time. The views are large, and unbounded scans cost credits.
+
+**End every query with `/* dbt-cost-tuning */`**, after the last clause (Snowflake strips leading comments, keeps
+trailing ones). Q4 filters on it, so this skill's own earlier analyses (e.g. Q6 counting a model's keys) never show
+up as "outside reads" of a model. The templates below leave it out for readability.
+
+Table names come from the manifest (`nodes[*].relation_name`, `sources[*].relation_name`). Never build one from a
+guessed schema; a dbt source's name (e.g. `tb_101`) is not a schema.
 
 ---
 
@@ -68,7 +76,8 @@ GET 'snow://dbt/<DB>.<SCHEMA>.<PROJECT>/results/query_id_<RUN_ID>/target/manifes
 GET 'snow://dbt/<DB>.<SCHEMA>.<PROJECT>/results/query_id_<RUN_ID>/target/run_results.json' 'file://<TMP_DIR>/';
 ```
 From `manifest.json`, use these fields of `nodes[*]`: `resource_type`, `config.materialized`, `config.unique_key`,
-`config.cluster_by`, `relation_name`, `raw_code`/`compiled_code`, and `depends_on.nodes`. Also use `child_map` and `exposures`.
+`config.cluster_by`, `relation_name`, `raw_code`/`compiled_code`, and `depends_on.nodes`. Also use `child_map`, `exposures`,
+and `sources[*].relation_name` (the real location of every source table, for Q6 on a source).
 
 ## Q3a: Run coverage (Phase 2): which runs ACCOUNT_USAGE has
 
@@ -172,10 +181,12 @@ FROM qc JOIN node_cost nc ON nc.node = qc.node CROSS JOIN cov
 GROUP BY qc.node, nc.credits_per_run, nc.raw_credits_per_run, nc.zero_scan_runs, cov.runs_used
 ORDER BY nc.credits_per_run DESC NULLS LAST;
 ```
-Python-model write queries come back as `unattributed:<table>`. Match `<table>` to a Python model's `relation_name`,
-move the row's metrics to that model, and drop its credits (SKILL.md Phase 2).
+Python-model write queries come back as `unattributed:<table>`. Match `<table>` to a Python model's `relation_name`
+and move the row's metrics to that model. Credits (rubric §2): **drop** them if they're `estimated`, **add** them
+if both the write and the outer node query are `attributed` (SKILL.md Phase 2).
 
-`pct_attributed` = 100 → `attributed`; 0 → `estimated`; anything in between → `mixed (N% attributed)`.
+`pct_attributed` = 100 → `attributed`; 0 → `estimated`; anything in between → `mixed (N% attributed)`. That's per
+node; the plan header is `attributed` only if every node is (rubric §1).
 
 `runs_used` < the window size from Q1 (or no rows at all) means some runs aren't in `ACCOUNT_USAGE` yet. Run Q3b for
 the runs Q3a marks `FALSE`. Never report the plan on fewer runs than Q1 found without saying so.
@@ -216,7 +227,8 @@ zero-scan rules as Q3. Rows from Q3b are always `estimated`.
 
 Use **`direct_objects_accessed`**. `base_objects_accessed` resolves views down to their base tables, so dbt models never show up in it.
 Treat every query belonging to an analyzed dbt run (the `q` set from Q3) as dbt's own, including uncommented Python-model queries.
-A comment filter isn't enough.
+A comment filter isn't enough. Also exclude this skill's own queries (tagged `/* dbt-cost-tuning */`), or every
+earlier analysis adds "outside reads" to the models it checked.
 
 ```sql
 WITH reads AS (
@@ -235,6 +247,7 @@ FROM reads r
 JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY h
   ON h.query_id = r.query_id AND h.start_time >= DATEADD(day, -<DAYS>, CURRENT_TIMESTAMP())
 WHERE h.query_text NOT ILIKE '%"app": "dbt"%'        -- first pass; then also drop query_ids from Q3's run set
+  AND h.query_text NOT ILIKE '%/* dbt-cost-tuning */%'  -- this skill's own earlier analyses
 GROUP BY 1;
 ```
 If a model has no row here, nothing outside dbt read it in the window.
@@ -265,7 +278,8 @@ FROM <MODEL_RELATION>;
   table's `row_count`. It doesn't need to be unique per model row.
 Free first check: compare Q3 `rows_written` with the grain table's `row_count` from Q5 or `INFORMATION_SCHEMA.TABLES`.
 More rows than the grain table means fan-out. To find the source, run the same query on each joined dimension's
-join key; dimensions are small, so this is cheap:
+join key; dimensions are small, so this is cheap. `<DIM_RELATION>` is the dimension's `relation_name` from the
+manifest: for a source table, `sources[*].relation_name` (e.g. `tasty_bytes_dbt_db.RAW.FRANCHISE`), not the dbt source name:
 ```sql
 SELECT COUNT(*) AS row_count, COUNT(DISTINCT <JOIN_KEY>) AS distinct_keys FROM <DIM_RELATION>;
 ```
