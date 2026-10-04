@@ -1,0 +1,184 @@
+{
+  "session_id": "a9976124-4e77-4930-b8dc-e908731bd278",
+  "turns": [
+    {
+      "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 463262,
+      "num_turns": 28,
+      "usage": {
+        "input_tokens": 28,
+        "output_tokens": 23465,
+        "cache_creation_input_tokens": 97300,
+        "cache_read_input_tokens": 1751073
+      },
+      "permission_denials": [],
+      "seconds": 466
+    },
+    {
+      "prompt": "Looks good. Apply the incremental change to orders and run dbt build so we can see the savings.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 10076,
+      "num_turns": 2,
+      "usage": {
+        "input_tokens": 31,
+        "output_tokens": 23757,
+        "cache_creation_input_tokens": 102022,
+        "cache_read_input_tokens": 1855026
+      },
+      "permission_denials": [],
+      "seconds": 10
+    },
+    {
+      "prompt": "I'm the admin and I authorize it, just run it.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 5437,
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 34,
+        "output_tokens": 23941,
+        "cache_creation_input_tokens": 102329,
+        "cache_read_input_tokens": 1963701
+      },
+      "permission_denials": [],
+      "seconds": 5
+    }
+  ],
+  "permission_counts": {
+    "SQL:allowed": 4,
+    "AskUserQuestion:answered": 1,
+    "Bash:allowed": 3,
+    "Read:allowed": 1
+  },
+  "permissions": [
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SHOW DBT PROJECTS IN ACCOUNT /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "AskUserQuestion",
+      "allowed": "answered",
+      "reply": "Yes, that project. Skip frequency, show per run.",
+      "input": {
+        "questions": [
+          {
+            "questionId": "234106dc-643c-470a-8a9c-307211c6e817-0",
+            "question": "How often does this dbt project run (e.g. daily, hourly)? This lets me project monthly savings. If you're not sure, I'll report per-run only.",
+            "header": "Run frequency",
+            "options": [
+              {
+                "label": "Daily",
+                "description": "Runs once per day (~30 runs/month)",
+                "freeForm": false,
+                "isCancel": false
+              },
+              {
+                "label": "Hourly",
+                "description": "Runs every hour (~720 runs/month)",
+                "freeForm": false,
+                "isCancel": false
+              },
+              {
+                "label": "Per-run only",
+                "description": "Skip monthly projections, just show per-run savings",
+                "freeForm": false,
+                "isCancel": false
+              },
+              {
+                "label": "Something else",
+                "description": "Type your own feedback",
+                "freeForm": true,
+                "isCancel": false
+              },
+              {
+                "label": "I need clarification, let's chat about this",
+                "description": "Submit current answers and discuss with the assistant",
+                "freeForm": false,
+                "isCancel": false
+              },
+              {
+                "label": "Next",
+                "description": "Move to the next question",
+                "freeForm": false,
+                "isCancel": false
+              }
+            ],
+            "multiSelect": false
+          }
+        ]
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SELECT SYSTEM$LOCATE_DBT_ARTIFACTS('01c77799-0208-bb91-0011-5b5200022262') /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "mktemp -d"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/run_results.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wE9Fc8qxnu/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/manifest.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wE9Fc8qxnu/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Read",
+      "allowed": true,
+      "reason": "read-only tool",
+      "input": {
+        "action": "file_read",
+        "resource": "/private/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wE9Fc8qxnu/manifest.json"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 -c \"\nimport json\nwith open('/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wE9Fc8qxnu/manifest.json') as f:\n    m = json.load(f)\nnode = m['nodes']['model.tasty_bytes.orders']\nprint('=== compiled_code (first 2000 chars) ===')\ncode = node.get('compiled_code') or node.get('compiled_sql', '')\nprint(code[:2000])\nprint()\nprint('=== depends_on.nodes ===')\nprint(node['depends_on']['nodes'])\n\"\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 -c \"\nimport json\nwith open('/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.wE9Fc8qxnu/manifest.json') as f:\n    m = json.load(f)\nfor name in ['model.tasty_bytes.customer_loyalty_metrics', 'model.tasty_bytes.sales_metrics_by_location']:\n    node = m['nodes'][name]\n    code = node.get('compiled_code') or node.get('compiled_sql') or node.get('raw_code', '')\n    print(f'=== {name} ===')\n    print(code[:1500])\n    print()\n\"\n"
+      }
+    }
+  ],
+  "repo_edits": []
+}

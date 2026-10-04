@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """Eval harness for the dbt-cost-tuning Cortex Code skill.
 
-Wraps one interactive Cortex Code session per eval run and saves, then commits and pushes:
+Runs Cortex Code sessions for eval cases and saves, then commits and pushes:
   telemetry  - Cortex session stats + every Snowflake query the session ran (INFORMATION_SCHEMA, no lag)
   grading    - automatic checks (regexes from cases.json, read-only check) + manual checklist
   findings   - free-text notes per run
 
-Usage (from the repo root):
+Automated (headless Cortex, driven by driver.py), from the repo root:
+  python3 evals/harness/eval.py run --suite core            # a named set from cases.json
+  python3 evals/harness/eval.py run TC01x3 TC10 [--dry-run] # any cases, xN = repeats
+  python3 evals/harness/eval.py finish-batch evals/runs/batches/<batch>.json   # if the telemetry login failed
+  python3 evals/harness/eval.py publish --batch evals/runs/batches/<batch>.json
+
+Manual (interactive Cortex, for screenshots):
   python3 evals/harness/eval.py start TC01      # before launching cortex
   python3 evals/harness/eval.py finish          # after /exit: export, measure, auto-grade, commit, push
   python3 evals/harness/eval.py publish         # after ticking manual checks + writing findings: commit, push
@@ -24,6 +30,9 @@ import re
 import subprocess
 import sys
 import tomllib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import driver  # noqa: E402
 
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
                       cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
@@ -48,8 +57,11 @@ def now():
     return dt.datetime.now(dt.timezone.utc)
 
 
-def sh(cmd, check=True):
-    r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+def sh(cmd, check=True, timeout=None):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        sys.exit(f"command timed out after {timeout}s: {' '.join(cmd[:3])} ... (waiting for a browser login?)")
     if check and r.returncode != 0:
         sys.exit(f"command failed: {' '.join(cmd)}\n{r.stderr or r.stdout}")
     return r.stdout
@@ -121,7 +133,7 @@ def write(path, content):
 
 
 def snow_json(query):
-    out = sh(["snow", "sql", "-c", ADMIN_CONN, "--format", "json", "-q", query])
+    out = sh(["snow", "sql", "-c", ADMIN_CONN, "--format", "json", "-q", query], timeout=300)
     data = json.loads(out)
     # multi-statement output is a list per statement; single statement is a list of rows
     return data[-1] if data and isinstance(data[0], list) else data
@@ -141,12 +153,14 @@ def current_run():
     return run_dir, json.load(open(os.path.join(run_dir, "meta.json")))
 
 
-def git_publish(paths, message):
+def git_publish(paths, message, push=True):
     sh(["git", "add", "--"] + paths)
     if not sh(["git", "diff", "--cached", "--name-only"]).strip():
         print("nothing new to commit")
     else:
         sh(["git", "commit", "-m", message])
+    if not push:
+        return
     r = subprocess.run(["git", "push", "-u", "origin", "HEAD"], capture_output=True, text=True, cwd=ROOT)
     if r.returncode != 0:
         print(f"!! PUSH FAILED. Fix and run `git push -u origin HEAD`:\n{r.stderr}")
@@ -276,8 +290,9 @@ def count_failures(summary, failed):
     return summary
 
 
-def snowflake_telemetry(start, end):
-    rows = snow_json(f"""
+def fetch_query_history(start, end):
+    """Every query the eval user ran in [start, end]. One call (one login) covers a whole batch."""
+    return snow_json(f"""
         SELECT query_id, start_time, role_name, warehouse_name, warehouse_size, query_type, execution_status,
                error_code, LEFT(error_message, 300) AS error_message, total_elapsed_time, execution_time,
                bytes_scanned, LEFT(query_text, 4000) AS query_text
@@ -287,6 +302,15 @@ def snowflake_telemetry(start, end):
                RESULT_LIMIT => 10000))
         WHERE start_time >= '{start.isoformat()}'::TIMESTAMP_LTZ AND user_name = CURRENT_USER()
         ORDER BY start_time""")
+
+
+def rows_in_window(rows, start, end):
+    t = lambda r: dt.datetime.fromisoformat(str(r["START_TIME"]).replace("Z", "+00:00"))
+    return [r for r in rows if start <= t(r) <= end]
+
+
+def snowflake_telemetry(start, end, rows=None):
+    rows = fetch_query_history(start, end) if rows is None else rows
     by_type, credits, elapsed, scanned = {}, 0.0, 0, 0
     violations, failed = [], []
     for r in rows:
@@ -313,7 +337,7 @@ def snowflake_telemetry(start, end):
     return count_failures(summary, failed), rows, violations, failed, unbounded
 
 
-def auto_grade(case, text, sf, cx=None):
+def auto_grade(case, text, sf, cx=None, drv=None):
     c = CASES[case]
     checks = [{"check": "skill_invoked (dbt-cost-tuning)",
                "pass": "dbt-cost-tuning" in ((cx or {}).get("skills_invoked") or [])}]
@@ -325,6 +349,10 @@ def auto_grade(case, text, sf, cx=None):
     checks.append({"check": "account_usage_queries_time_bounded", "pass": sf["account_usage_unbounded"] == 0})
     if c.get("no_failed_queries"):
         checks.append({"check": "no_failed_skill_queries", "pass": sf["failed_queries"] == 0})
+    if drv:  # automated runs only
+        checks.append({"check": "session_completed (every prompt answered, no timeout)",
+                       "pass": all(t["result"] == "success" for t in drv["turns"])})
+        checks.append({"check": "no_repo_edits (git status unchanged outside evals/runs)", "pass": not drv["repo_edits"]})
     return checks
 
 
@@ -354,25 +382,38 @@ FINDINGS_TEMPLATE = """# Findings: {case} {run_id}
 """
 
 
+def load_session(session_id):
+    p = os.path.join(CONV_DIR, session_id + ".json")
+    return json.load(open(p)) if os.path.exists(p) else {"session_id": session_id}
+
+
 def cmd_finish(args):
     if args.rerun:  # re-process a finished run (e.g. after a harness fix); keeps its original time window
         run_dir = os.path.join(ROOT, args.rerun)
         meta = json.load(open(os.path.join(run_dir, "meta.json")))
-        ended = dt.datetime.fromisoformat(json.load(open(os.path.join(run_dir, "telemetry.json")))["ended_at"])
+        ended = dt.datetime.fromisoformat(meta.get("ended_at") or
+                                          json.load(open(os.path.join(run_dir, "telemetry.json")))["ended_at"])
     else:
         run_dir, meta = current_run()
         ended = now()
     started = dt.datetime.fromisoformat(meta["started_at"])
-    rel = os.path.relpath(run_dir, ROOT)
-
-    session = None
-    if args.session:
-        p = os.path.join(CONV_DIR, args.session + ".json")
-        session = json.load(open(p)) if os.path.exists(p) else {"session_id": args.session}
-    else:
-        session = find_session(started)
+    sid = args.session or meta.get("session_id")  # automated runs know their session id
+    session = load_session(sid) if sid else find_session(started)
     if not session:
         print("!! no Cortex session found after the run start; pass --session <id> (see `cortex conversations list`)")
+    process_run(run_dir, meta, session, ended, keep_snowflake=args.keep_snowflake)
+    if not args.rerun:
+        os.remove(CURRENT)
+    build_summary()
+    rel = os.path.relpath(run_dir, ROOT)
+    git_publish([rel, "evals/results.md"], f"eval({meta['case']}): {meta['run_id']} telemetry + auto-grading")
+    print(f"\nNext: tick manual checks in {rel}/grading.md, write {rel}/findings.md, then:\n"
+          f"  python3 evals/harness/eval.py publish {rel}")
+
+
+def process_run(run_dir, meta, session, ended, rows=None, keep_snowflake=False):
+    """Export the transcript, measure, auto-grade. `rows`: this run's query history, if already fetched."""
+    started = dt.datetime.fromisoformat(meta["started_at"])
 
     pretty, tjson = "", None
     if session:
@@ -391,14 +432,14 @@ def cmd_finish(args):
         write(os.path.join(run_dir, "transcript.json"),
               {"unparsed_lines": bad, "messages": redact_obj(public_transcript(tjson))})
 
-    if args.keep_snowflake:  # re-process the transcript only; reuse the Snowflake telemetry already saved
+    if keep_snowflake:  # re-process the transcript only; reuse the Snowflake telemetry already saved
         old = json.load(open(os.path.join(run_dir, "telemetry.json")))
         sf_summary, violations = old["snowflake"], old["read_only_violations"]
         failed, unbounded = old["failed_queries"], old["account_usage_unbounded"]
         rows = json.load(open(os.path.join(run_dir, "queries.json")))
         sf_summary = count_failures(sf_summary, failed)
     else:
-        sf_summary, rows, violations, failed, unbounded = snowflake_telemetry(started, ended)
+        sf_summary, rows, violations, failed, unbounded = snowflake_telemetry(started, ended, rows)
     telemetry = {
         "case": meta["case"], "run_id": meta["run_id"], "started_at": meta["started_at"],
         "ended_at": ended.isoformat(), "cortex_version": meta["cortex_version"],
@@ -406,31 +447,205 @@ def cmd_finish(args):
         "cortex": cortex_telemetry(session, tjson), "snowflake": sf_summary,
         "read_only_violations": violations, "failed_queries": failed, "account_usage_unbounded": unbounded,
     }
+    dpath = os.path.join(run_dir, "driver.json")
+    drv = json.load(open(dpath)) if os.path.exists(dpath) else None
+    if drv:
+        write(dpath, redact_obj(drv))  # again, now that the session's account host is known
+        telemetry["driver"] = {k: drv[k] for k in ("turns", "permission_counts", "repo_edits")}
     write(os.path.join(run_dir, "telemetry.json"), redact_obj(telemetry))
     write(os.path.join(run_dir, "queries.json"), redact_obj(rows))
-
-    auto = auto_grade(meta["case"], agent_text(pretty), sf_summary, telemetry["cortex"])
+    auto = auto_grade(meta["case"], agent_text(pretty), sf_summary, telemetry["cortex"], drv)
     grading = {"auto": auto, "manual": {}, "verdict": None}
     write(os.path.join(run_dir, "grading.json"), grading)
     write(os.path.join(run_dir, "grading.md"), grading_md(meta, auto))
     fpath = os.path.join(run_dir, "findings.md")
     if not os.path.exists(fpath):
         write(fpath, FINDINGS_TEMPLATE.format(**meta))
-    if not args.rerun:
-        os.remove(CURRENT)
 
     passed = sum(a["pass"] for a in auto)
-    print(f"Telemetry: {sf_summary['queries']} Snowflake queries, {sf_summary['failed_queries']} failed "
-          f"(+{sf_summary['cortex_internal_failed']} Cortex Code internal), "
+    print(f"{meta['case']} {meta['run_id']}: {sf_summary['queries']} Snowflake queries, "
+          f"{sf_summary['failed_queries']} failed (+{sf_summary['cortex_internal_failed']} Cortex Code internal), "
           f"~{sf_summary['est_credits_analysis']} credits, read-only violations: {sf_summary['read_only_violations']}")
-    print(f"Auto checks: {passed}/{len(auto)} passed")
+    print(f"  auto checks: {passed}/{len(auto)} passed")
     for a in auto:
         if not a["pass"]:
             print(f"  ✗ {a['check']}")
+    return auto
+
+
+# ---------------------------------------------------------------------------- run (automated)
+BATCHES = os.path.join(RUNS, "batches")
+CASES_DOC = json.load(open(os.path.join(EVALS, "harness", "cases.json")))
+
+
+def parse_selection(specs, suite, repeats):
+    """['TC01x3', 'tc02'] / --suite core -> [(case, n)] in the order the cases have to run (block, then id)."""
+    sel = {}
+    if suite:
+        if suite not in CASES_DOC.get("suites", {}):
+            sys.exit(f"unknown suite {suite}; known: {', '.join(CASES_DOC.get('suites', {}))}")
+        sel.update(CASES_DOC["suites"][suite]["cases"])
+    for spec in specs:
+        m = re.fullmatch(r"(TC\d+)(?:[X:*](\d+))?", spec.upper())
+        if not m or m.group(1) not in CASES:
+            sys.exit(f"bad case {spec!r}: use e.g. TC01 or TC01x3; known: {', '.join(CASES)}")
+        sel[m.group(1)] = int(m.group(2) or repeats or 1)
+    if repeats and suite and not specs:
+        sel = {c: repeats for c in sel}
+    if not sel:
+        sys.exit("say which evals to run, e.g. `eval.py run TC01x3 TC02` or `eval.py run --suite core`")
+    return sorted(sel.items(), key=lambda kv: (CASES[kv[0]].get("block", "Z"), kv[0]))
+
+
+def preflight(plan):
+    problems, warnings = [], []
+    if os.path.exists(CURRENT):
+        problems.append(f"a manual run is in progress ({open(CURRENT).read().strip()}): finish it first")
+    if "dbt-cost-tuning" not in sh(["cortex", "skill", "list"], check=False):
+        problems.append("`cortex skill list` doesn't show dbt-cost-tuning (run from the repo root)")
+    try:
+        conns = tomllib.load(open(CONN_FILE, "rb"))
+    except FileNotFoundError:
+        conns = {}
+    for case, _ in plan:
+        c = CASES[case]
+        if c["connection"] not in conns and c.get("setup_creates_connection"):
+            warnings.append(f"{case}: connection [{c['connection']}] will be created by its setup")
+        elif c["connection"] not in conns:
+            problems.append(f"{case}: connection [{c['connection']}] missing from {CONN_FILE}. "
+                            + c.get("connection_setup", "See RUNBOOK.md, 'Connections'."))
+        if c.get("run_before") and now().date().isoformat() > c["run_before"]:
+            warnings.append(f"{case}: designed to run before {c['run_before']} (see RUNBOOK.md); results may differ")
+    return problems, warnings
+
+
+def run_setup(cmds, label):
+    for cmd in cmds:
+        print(f"  setup ({label}): {cmd}")
+        r = subprocess.run(cmd, shell=True, cwd=ROOT)
+        if r.returncode != 0:
+            sys.exit(f"setup failed ({label}): {cmd}")
+
+
+def repo_status():
+    """Changed paths outside evals/runs, to catch the agent editing the dbt project or the skill."""
+    out = sh(["git", "status", "--porcelain", "--untracked-files=all"])
+    return {l[3:] for l in out.splitlines() if not l[3:].startswith("evals/runs/")}
+
+
+def run_one(case, batch_id):
+    c = CASES[case]
+    started = now()
+    run_dir = os.path.join(RUNS, case, "run-" + started.strftime("%Y%m%dT%H%M%SZ"))
+    before = repo_status()
+    events_log = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"cortex-eval-{case}-{started:%H%M%S}.jsonl")
+    sess = driver.CortexSession(c["connection"], ROOT, events_log, answers=c.get("answers"))
+    meta = {
+        "case": case, "type": c["type"], "run_id": os.path.basename(run_dir), "mode": "auto", "batch": batch_id,
+        "started_at": started.isoformat(), "connection": redact(c["connection"]),
+        "cortex_version": sh(["cortex", "--version"], check=False).strip(),
+        "git_sha": sh(["git", "rev-parse", "--short", "HEAD"]).strip(),
+        "skill_sha": skill_sha(), "prompts": c["prompts"], "session_id": sess.session_id,
+    }
+    write(os.path.join(run_dir, "meta.json"), meta)
+    print(f"  {case} {meta['run_id']}  session {sess.session_id}")
+    timeout = 60 * c.get("turn_timeout_minutes", CASES_DOC.get("turn_timeout_minutes", 20))
+    try:
+        with sess:
+            sess.run(c["prompts"], timeout)
+    except KeyboardInterrupt:
+        sess.turns.append({"prompt": None, "result": "interrupted", "seconds": 0})
+        raise
+    finally:  # save what happened even if the run was interrupted
+        save_run(run_dir, meta, sess, before)
+    return run_dir
+
+
+def save_run(run_dir, meta, sess, before):
+    turns = sess.turns
+    for i, t in enumerate(turns, 1):
+        print(f"    turn {i}: {t['result']} in {t['seconds']}s")
+    edits = sorted(repo_status() - before)
+    if edits:
+        print(f"    !! repo changed during the run: {', '.join(edits)}")
+    counts = {}
+    for p in sess.permissions:
+        key = f"{p['tool']}:{'allowed' if p['allowed'] is True else 'denied' if p['allowed'] is False else p['allowed']}"
+        counts[key] = counts.get(key, 0) + 1
+    meta["ended_at"] = now().isoformat()
+    write(os.path.join(run_dir, "meta.json"), meta)
+    write(os.path.join(run_dir, "driver.json"), redact_obj({
+        "session_id": sess.session_id, "turns": turns, "permission_counts": counts,
+        "permissions": sess.permissions, "repo_edits": edits}))
+
+
+def cmd_run(args):
+    plan = parse_selection(args.cases, args.suite, args.repeats)
+    problems, warnings = preflight(plan)
+    print("Plan (runs one at a time; telemetry is attributed by user + time window):")
+    for case, n in plan:
+        c = CASES[case]
+        print(f"  {case} x{n}  [{c['type']}, block {c.get('block', '?')}]  connection {c['connection']}")
+        for cmd in c.get("setup", {}).get("once", []):
+            print(f"      setup once: {cmd}")
+        for cmd in c.get("setup", {}).get("each", []):
+            print(f"      setup before each run: {cmd}")
+    for w in warnings:
+        print(f"  ! {w}")
+    if problems:
+        sys.exit("Can't start:\n  " + "\n  ".join(problems))
+    if args.dry_run:
+        return
+    if not args.yes and input("Start? [y/N] ").strip().lower() != "y":
+        sys.exit("cancelled")
+
+    batch_id = "batch-" + now().strftime("%Y%m%dT%H%M%SZ")
+    manifest = {"batch": batch_id, "selection": [[c, n] for c, n in plan], "runs": []}
+    mpath = os.path.join(BATCHES, batch_id + ".json")
+    try:
+        for case, n in plan:
+            if not args.skip_setup:
+                run_setup(CASES[case].get("setup", {}).get("once", []), case)
+            for i in range(n):
+                if not args.skip_setup:
+                    run_setup(CASES[case].get("setup", {}).get("each", []), f"{case} run {i + 1}")
+                manifest["runs"].append(os.path.relpath(run_one(case, batch_id), ROOT))
+                write(mpath, manifest)
+    except KeyboardInterrupt:
+        latest = max(glob.glob(os.path.join(RUNS, "TC*", "run-*")), key=os.path.getmtime)
+        if os.path.relpath(latest, ROOT) not in manifest["runs"] and os.path.exists(os.path.join(latest, "driver.json")):
+            manifest["runs"].append(os.path.relpath(latest, ROOT))  # the interrupted run, saved by run_one
+        write(mpath, manifest)
+        sys.exit(f"\ninterrupted; {len(manifest['runs'])} run(s) saved. Grade them with:\n"
+                 f"  python3 evals/harness/eval.py finish-batch {os.path.relpath(mpath, ROOT)}")
+    finish_batch(mpath, publish=not args.no_publish)
+
+
+def finish_batch(mpath, publish=True):
+    """One Snowflake telemetry query for the whole batch, then measure + auto-grade every run, commit, push."""
+    manifest = json.load(open(mpath))
+    runs = [(os.path.join(ROOT, r), json.load(open(os.path.join(ROOT, r, "meta.json")))) for r in manifest["runs"]]
+    if not runs:
+        sys.exit("batch has no runs")
+    start = min(dt.datetime.fromisoformat(m["started_at"]) for _, m in runs)
+    end = max(dt.datetime.fromisoformat(m["ended_at"]) for _, m in runs)
+    print(f"\nFetching Snowflake query history for the batch as [{ADMIN_CONN}] (one login)...")
+    try:
+        rows = fetch_query_history(start, end)
+    except SystemExit as e:  # sh() exits on a failed command
+        print(f"{e}\n!! Snowflake telemetry failed; the sessions are saved. Finish later (within 7 days) with:\n"
+              f"  python3 evals/harness/eval.py finish-batch {os.path.relpath(mpath, ROOT)}")
+        sys.exit(1)
+    for run_dir, meta in runs:
+        s, e = dt.datetime.fromisoformat(meta["started_at"]), dt.datetime.fromisoformat(meta["ended_at"])
+        process_run(run_dir, meta, load_session(meta["session_id"]), e, rows=rows_in_window(rows, s, e))
     build_summary()
-    git_publish([rel, "evals/results.md"], f"eval({meta['case']}): {meta['run_id']} telemetry + auto-grading")
-    print(f"\nNext: tick manual checks in {rel}/grading.md, write {rel}/findings.md, then:\n"
-          f"  python3 evals/harness/eval.py publish {rel}")
+    if publish:
+        sel = ", ".join(f"{c}x{n}" if n > 1 else c for c, n in manifest["selection"])
+        git_publish(manifest["runs"] + ["evals/results.md", os.path.relpath(mpath, ROOT)],
+                    f"eval: {manifest['batch']} ({sel}) telemetry + auto-grading")
+    print(f"\nNext: tick manual checks in each run's grading.md, write findings.md, then:\n"
+          f"  python3 evals/harness/eval.py publish --batch {os.path.relpath(mpath, ROOT)}")
 
 
 # ---------------------------------------------------------------------------- publish / summary
@@ -456,7 +671,15 @@ def verdict(auto, manual, override):
 
 
 def cmd_publish(args):
-    run_dir = os.path.join(ROOT, args.run_dir) if args.run_dir else latest_run_dir()
+    if args.batch:
+        dirs = [os.path.join(ROOT, r) for r in json.load(open(os.path.join(ROOT, args.batch)))["runs"]]
+    else:
+        dirs = [os.path.join(ROOT, args.run_dir) if args.run_dir else latest_run_dir()]
+    for run_dir in dirs:
+        publish_run(run_dir, push=run_dir == dirs[-1])
+
+
+def publish_run(run_dir, push=True):
     g = json.load(open(os.path.join(run_dir, "grading.json")))
     manual, override = parse_grading_md(os.path.join(run_dir, "grading.md"))
     g["manual"], g["verdict"] = manual, verdict(g["auto"], manual, override)
@@ -466,7 +689,7 @@ def cmd_publish(args):
     build_summary()
     print(f"{meta['case']} {meta['run_id']}: {g['verdict']}")
     git_publish([os.path.relpath(run_dir, ROOT), "evals/results.md"],
-                f"eval({meta['case']}): {meta['run_id']} grading + findings ({g['verdict']})")
+                f"eval({meta['case']}): {meta['run_id']} grading + findings ({g['verdict']})", push=push)
 
 
 def latest_run_dir():
@@ -554,9 +777,21 @@ def main():
     f.add_argument("--keep-snowflake", action="store_true",
                    help="with --rerun: reuse the saved Snowflake telemetry instead of querying it again")
     p = sub.add_parser("publish"); p.add_argument("run_dir", nargs="?", help="evals/runs/<CASE>/<run> (default: latest)")
+    p.add_argument("--batch", metavar="MANIFEST", help="publish every run of a batch, e.g. evals/runs/batches/batch-....json")
+    r = sub.add_parser("run", help="run evals headlessly: eval.py run TC01x3 TC02 | --suite core")
+    r.add_argument("cases", nargs="*", help="TC01, TC01x3 ... (xN = repeats for that case)")
+    r.add_argument("--suite", help="a named set from cases.json 'suites'")
+    r.add_argument("--repeats", type=int, help="repeats for cases given without xN (default 1)")
+    r.add_argument("--dry-run", action="store_true", help="print the plan and preflight results, run nothing")
+    r.add_argument("--yes", "-y", action="store_true", help="don't ask before starting")
+    r.add_argument("--skip-setup", action="store_true", help="don't run the cases' setup commands")
+    r.add_argument("--no-publish", action="store_true", help="grade but don't commit or push")
+    fb = sub.add_parser("finish-batch", help="fetch telemetry + grade a batch whose Snowflake step failed")
+    fb.add_argument("manifest"); fb.add_argument("--no-publish", action="store_true")
     sub.add_parser("summary")
     a = ap.parse_args()
-    {"start": cmd_start, "finish": cmd_finish, "publish": cmd_publish,
+    {"start": cmd_start, "finish": cmd_finish, "publish": cmd_publish, "run": cmd_run,
+     "finish-batch": lambda x: finish_batch(os.path.join(ROOT, x.manifest), publish=not x.no_publish),
      "summary": lambda _: (build_summary(), print("wrote evals/results.md"))}[a.cmd](a)
 
 

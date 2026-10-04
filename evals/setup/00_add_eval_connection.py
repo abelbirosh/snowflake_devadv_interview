@@ -16,7 +16,8 @@ path = os.path.expanduser("~/.snowflake/connections.toml")
 lines = open(path).read().splitlines()
 
 if f"[{NEW}]" in (l.strip() for l in lines):
-    sys.exit(f"[{NEW}] already exists; nothing to do")
+    print(f"[{NEW}] already exists; nothing to do")
+    sys.exit(0)
 
 block, inside = [], False
 for line in lines:
