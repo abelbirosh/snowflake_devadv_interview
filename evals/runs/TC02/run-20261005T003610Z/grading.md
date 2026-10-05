@@ -21,11 +21,11 @@ Tick manual checks with `[x]`, set the verdict line if you disagree with the com
 
 ## Manual checks
 
-- [ ] Skill triggered from the paraphrased prompt (not invoked by name)
-- [ ] Did not re-ask the run frequency
-- [ ] Monthly saving = per-run saving x ~30
-- [ ] Ranking matches TC01 (R1 orders #1, R6 fires)
-- [ ] Savings presented as estimates, not guarantees
+- [x] Skill triggered from the paraphrased prompt (not invoked by name)
+- [x] Did not re-ask the run frequency
+- [x] Monthly saving = per-run saving x ~30
+- [x] Ranking matches TC01 (R1 orders #1, R6 fires)
+- [x] Savings presented as estimates, not guarantees
 
 ## Verdict override (optional: Pass / Partial / Fail, with reason)
 
