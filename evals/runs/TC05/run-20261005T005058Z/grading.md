@@ -18,11 +18,11 @@ Tick manual checks with `[x]`, set the verdict line if you disagree with the com
 
 ## Manual checks
 
-- [ ] Continued instead of stopping
+- [x] Continued instead of stopping
 - [ ] R2, R3, R4 listed as not evaluable with the grant that enables each
 - [ ] R1 still fires on orders
 - [ ] No spill numbers reported (not available in INFORMATION_SCHEMA)
 
 ## Verdict override (optional: Pass / Partial / Fail, with reason)
 
-Verdict: 
+Verdict: Fail (Cortex Code infrastructure error: response stream interrupted after 843 s, no plan produced; not a skill result. Re-run as run-20261005T011128Z)
