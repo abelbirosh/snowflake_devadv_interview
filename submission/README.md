@@ -11,7 +11,8 @@ proposes changes and never applies them.
 |---|---|
 | `dbt-cost-tuning/` | The skill: `SKILL.md` (workflow and guardrails), `references/scoring-rubric.md` (credit sourcing, rule weights, thresholds), `references/queries.md` (SQL templates Q0–Q6) |
 | `README.md` | This file |
-| `evals/` | Test matrix, eval harness, setup scripts, and every graded run with its transcript, query telemetry and screenshots |
+| `evals/` | Test matrix, eval harness, setup scripts, fix list, and every graded run with its transcript, query telemetry, grading and findings |
+| `screenshots/` | Every run's Cortex Code CLI screenshots, one folder per test case (`TC01-happy-path/`, `TC05-no-account-usage/`, …) and one subfolder per run (`run<N>-<date>-<verdict>`). `screenshots/README.md` indexes them |
 | `tasty_bites/` | The Tasty Bytes dbt demo project the evals run against (Apache 2.0, from Snowflake's dbt Projects on Snowflake tutorials) |
 
 ## Install
@@ -149,7 +150,9 @@ Each run folder (`evals/runs/<case>/<run>/`) has:
 - `telemetry.json`: Cortex tool calls and every Snowflake query
 - `grading.md`: automatic and manual checks
 - `findings.md`: expected vs observed
-- `screenshots/` (manual runs only)
+
+Screenshots (manual runs only) are in `screenshots/<case>-<name>/run<N>-<date>-<verdict>/`; `screenshots/README.md`
+maps each folder to its run id.
 
 Account identifiers are redacted throughout. In the docs and scripts, `MY_CONNECTION` stands for the Snowflake CLI
 connection name to use.
