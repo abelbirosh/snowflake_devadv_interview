@@ -1,0 +1,22 @@
+--- a/tasty_bytes_dbt_demo/models/marts/orders.sql	2026-10-04 16:30:45
++++ b/tasty_bytes_dbt_demo/models/marts/orders.sql	2026-10-04 16:53:54
+@@ -1,3 +1,11 @@
++{{
++    config(
++        materialized='incremental',
++        incremental_strategy='delete+insert',
++        unique_key='order_id'
++    )
++}}
++
+ SELECT 
+     oh.order_id,
+     oh.truck_id,
+@@ -44,3 +52,7 @@
+     ON oh.location_id = l.location_id
+ LEFT JOIN {{ ref('raw_customer_customer_loyalty') }} cl
+     ON oh.customer_id = cl.customer_id
++
++{% if is_incremental() %}
++WHERE oh.order_ts > (SELECT DATEADD(day, -3, MAX(order_ts)) FROM {{ this }})
++{% endif %}

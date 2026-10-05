@@ -1,0 +1,105 @@
+{
+  "session_id": "f85082ff-b830-466b-b6df-2eb6087e8e68",
+  "turns": [
+    {
+      "prompt": "Which dbt models cost the most in my Tasty Bytes project? Give me a tuning plan.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 42999,
+      "num_turns": 7,
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1804,
+        "cache_creation_input_tokens": 143525,
+        "cache_read_input_tokens": 149155
+      },
+      "permission_denials": [],
+      "seconds": 48
+    },
+    {
+      "prompt": "Yes, that project. Skip frequency, show per run.",
+      "result": "success",
+      "is_error": false,
+      "duration_ms": 329822,
+      "num_turns": 17,
+      "usage": {
+        "input_tokens": 18,
+        "output_tokens": 19563,
+        "cache_creation_input_tokens": 172453,
+        "cache_read_input_tokens": 1074344
+      },
+      "permission_denials": [],
+      "seconds": 330
+    }
+  ],
+  "permission_counts": {
+    "SQL:allowed": 4,
+    "Bash:allowed": 3
+  },
+  "permissions": [
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SHOW DBT PROJECTS IN ACCOUNT /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "SELECT SYSTEM$LOCATE_DBT_ARTIFACTS('01c77799-0208-bb91-0011-5b5200022262') /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "mktemp -d"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/manifest.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.pQ64TzD7sr/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "SQL",
+      "allowed": true,
+      "reason": "read-only SQL",
+      "input": {
+        "action": "execute_command",
+        "resource": "GET 'snow://dbt/TASTY_BYTES_DBT_DB.DEV.TASTY_BYTES_DBT/results/query_id_01c77799-0208-bb91-0011-5b5200022262/target/run_results.json' 'file:///var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.pQ64TzD7sr/' /* dbt-cost-tuning */"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 -c \"\nimport json, sys\n\nwith open('/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.pQ64TzD7sr/manifest.json') as f:\n    m = json.load(f)\n\n# Models\nprint('=== MODELS ===')\nfor k, v in m.get('nodes', {}).items():\n    if v.get('resource_type') in ('model', 'test'):\n        cfg = v.get('config', {})\n        print(json.dumps({\n            'unique_id': v.get('unique_id'),\n            'resource_type': v.get('resource_type'),\n            'materialized': cfg.get('materialized'),\n            'relation_name': v.get('relation_name'),\n            'unique_key': cfg.get('unique_key'),\n            'cluster_by': cfg.get('cluster_by'),\n            'original_file_path': v.get('original_file_path'),\n            'depends_on_nodes': v.get('depends_on', {}).get('nodes', []),\n            'language': v.get('language'),\n        }))\n\nprint()\nprint('=== SOURCES ===')\nfor k, v in m.get('sources', {}).items():\n    print(json.dumps({\n        'unique_id': v.get('unique_id'),\n        'relation_name': v.get('relation_name'),\n    }))\n\nprint()\nprint('=== CHILD_MAP (excerpt) ===')\ncm = m.get('child_map', {})\nfor k, children in cm.items():\n    if children:\n        print(json.dumps({k: children}))\n\nprint()\nprint('=== EXPOSURES ===')\nfor k, v in m.get('exposures', {}).items():\n    print(json.dumps({\n        'unique_id': v.get('unique_id'),\n        'depends_on_nodes': v.get('depends_on', {}).get('nodes', []),\n    }))\n\" 2>&1 | head -200\n"
+      }
+    },
+    {
+      "tool": "Bash",
+      "allowed": true,
+      "reason": "read-only shell",
+      "input": {
+        "action": "execute_command",
+        "resource": "python3 -c \"\nimport json\nwith open('/var/folders/pq/c_ny9d650l5b915rtjcq_sww0000gn/T/tmp.pQ64TzD7sr/manifest.json') as f:\n    m = json.load(f)\nfor k, v in m.get('nodes', {}).items():\n    if v.get('resource_type') == 'model' and v.get('config', {}).get('materialized') in ('table',):\n        print(f\\\"--- {v['unique_id']} ({v.get('language','sql')}) ---\\\")\n        code = v.get('compiled_code') or v.get('raw_code', '')\n        print(code[:2000])\n        print()\n\"\n"
+      }
+    }
+  ],
+  "repo_edits": []
+}

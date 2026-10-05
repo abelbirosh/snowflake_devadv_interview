@@ -40,3 +40,34 @@ Ordered by how often they showed up, then by impact on the plan.
 | H9 | `finish` needs an interactive browser login (`AG26866` uses OAuth), so it can't run from automation | **Fixed** (`3d9663d`): RUNBOOK: run `finish` in your own terminal, or point `EVAL_ADMIN_CONN` at a key-pair connection |
 | H10 | `cortex exec --allowed sql_execute` still blocks SQL, so the smoke test can't run a query | **Fixed** (`3d9663d`): RUNBOOK: a model reply is the smoke test; check the role with `snow sql` |
 | H11 | RUNBOOK.md screenshot 02 expects the 2-run window at the checkpoint, but Q1 runs after it | **Fixed** (`3d9663d`): RUNBOOK: window checked in screenshot 04 (plan header) |
+
+## Query-template bugs from review (2026-10-04)
+
+Found by reading the SQL in `references/queries.md`, not by an eval run: the 2 baseline builds are full builds with
+nothing else running, so none of these changed a result yet. Each fix was checked on the baseline builds: Q3
+reproduces the attributed figures exactly (`orders` 0.12848, total 0.14709 per run), and Q3b reproduces build 1's
+estimated figures (`orders` 0.09878, relationships test 0.00609).
+
+| # | Bug | Evidence | Fix (file → section) | Status |
+|---|---|---|---|---|
+| S11 | **Q1/Q3a/Q3 can miss the project's runs.** `DBT_PROJECT_EXECUTION_HISTORY()` returns at most `RESULT_LIMIT` rows (default 100) across all projects, and `WHERE` filters after that cut. Q3/Q3a also didn't filter `command`, so a successful `test`/`compile` could take a window slot. The function only covers 7 days: the baseline builds drop out on 2026-10-09 | Snowflake docs (usage notes: filter arguments are applied before `RESULT_LIMIT`, a `WHERE` clause after) | queries.md Q1: filter with `OBJECT_NAME`/`DATABASE`/`SCHEMA` arguments, `command IN ('build','run')`; Q1b reads older runs from `ACCOUNT_USAGE.DBT_PROJECT_EXECUTION_HISTORY` (365 days); Q1c for the last failure. Q3a/Q3 take the window's run IDs from Q1 instead of re-deriving it | Fixed |
+| S12 | **Q3/Q3b count unrelated queries.** A build's queries were matched by same user + time window only. In build 1's window that's 387 queries, of which 61 carry a dbt `node_id`; an ad-hoc query or a second dbt build by the same user would be added in | Probe on build 1: 54 queries have `root_query_id` = the `EXECUTE DBT PROJECT` query (53 commented + the Python write query) | queries.md Q3: attributed queries count only if `root_query_id` is the run; unattributed ones only if they carry a `node_id` or write a Python model's table (`<PYTHON_MODEL_RELATIONS>`). Q3a reports `overlapping_dbt_runs`. Q3b: same rule. SKILL.md Phase 2, rubric §2 | Fixed |
+| S13 | **Q3 overstates models that skip runs.** `credits_per_run` averaged a node over the runs it appeared in, so a model built in 1 of 5 runs showed its full build cost per run: share, rank and monthly saving 5× too high | Reading the SQL (`node_cost` averaged over `node_run` rows) | queries.md Q3: node total ÷ `<WINDOW_RUNS>`, plus `runs_built`; Q3b: same divisor. SKILL.md Phase 2 step 4, rubric §2 | Fixed |
+| S14 | **Q3b could truncate on a busy account and silently return nothing for lowercase users.** `INFORMATION_SCHEMA.QUERY_HISTORY()` applies `RESULT_LIMIT` before `WHERE user_name = …`, like S11. `QUERY_HISTORY_BY_USER` filters first, but matches `USER_NAME` as an identifier: `'jdoe'` returned 0 rows, `'"jdoe"'` returned all 387 | Tested on build 1 | queries.md Q3b: step 1 reads the run's user from a 2-second window; step 2 uses `QUERY_HISTORY_BY_USER(USER_NAME => '"<RUN_USER>"')` | Fixed |
+
+## Found by the before/after builds (2026-10-04)
+
+From [`cost_example/`](cost_example/README.md): `orders` deployed as an incremental model in a separate project
+(COST_DEMO), one full refresh and three incremental builds.
+
+| # | Bug | Evidence | Proposed fix | Status |
+|---|---|---|---|---|
+| S15 | **Re-measuring after a change mixes in the transition runs.** The window keeps `--full-refresh` runs and the first incremental run after one. On COST_DEMO, Q3 reports `orders` at 0.0359 credits/run against a steady state of ~0.0073 (5×) | Fixed Q3 on the 4 COST_DEMO builds; `cost_example/README.md` §4 | Q1: flag `--full-refresh` in `args`; when re-measuring a change, start the window at the second incremental run after the last full refresh, and say so | Open |
+| S16 | **R1's "verify" step doesn't warn about the first run or the DELETE scan.** The first incremental run after a full refresh cost 35% of a full build (its DELETE read every partition), and every DELETE scans `order_id` across the whole table, which grows with it | Operator stats for both DELETEs; `cost_example/README.md` §6 | SKILL.md Phase 3 (R1): say the first incremental run after `--full-refresh` is a one-time cost; for `delete+insert` on a large unclustered target, suggest `incremental_predicates` on the event column (to test) | Open |
+
+## Found by the 2026-10-05 eval runs (skill `4258d18f71f4`)
+
+| # | Bug | Seen in | Proposed fix | Status |
+|---|---|---|---|---|
+| S17 | **Reference numbers reported as account evidence.** With no `ACCOUNT_USAGE`, TC05 still scored R3 at Signal 50 "from the rubric's verified Tasty Bytes data: 12.45 GB local spill", and listed R3 under both "Observed, below threshold" and "Not evaluable". The rubric has five "Verified on Tasty Bytes" notes with real figures (§2, R1, R2, R3, R5), so the same leak can happen elsewhere | TC05 `run-20261005T011128Z` | scoring-rubric.md: move the "Verified on Tasty Bytes" notes out of the skill (to `evals/baseline_runs.md`) or mark them "illustration only, never report". SKILL.md Phase 3: a rule whose data source is unavailable goes only under "Not evaluable", with no Signal and no figures | Open |
+| S18 | **Tries to edit the model file after declining to apply.** After "Apply the change and run dbt build", the skill declined the build but called `edit` on `models/marts/orders.sql` to "write the local diff", without the user accepting a diff. The harness denied it, so nothing changed | TC10 `run-20261005T004249Z` | SKILL.md Phase 4 closing offer and Failure handling: never edit project files; the local diff is a separate file (e.g. a temp dir), written only after the user accepts the offer | Open |

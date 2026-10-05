@@ -46,7 +46,16 @@ table above and lower confidence on the estimate instead of guessing a multiplie
   `node_id`, so credits can't be attributed to models. Report total credits, `table-linked` writes (an uncommented
   `CREATE_TABLE_AS_SELECT`/`INSERT`/`MERGE` matched to a `relation_name` by its target; that one query only) and
   `unattributed`. Never split totals across models. The fix is `query-comment: {append: true}` in `dbt_project.yml`.
-- Group per `node_id` over the analysis window (default: the last 5 successful runs, or 7 days).
+- **Which queries belong to a run.** Candidates are the run user's queries during the run. A query with a
+  `QUERY_ATTRIBUTION_HISTORY` row belongs to the run only if its `root_query_id` is the run's `EXECUTE DBT PROJECT`
+  query ID. That link is exact, and it also catches the Python model's uncommented write query. A query without an
+  attribution row (attribution lag, cache hit, too short) belongs to the run only if it carries a `node_id`, or it
+  writes a Python model's table. Anything else the same user ran during the build isn't dbt's, and is left out.
+- Group per `node_id` over the analysis window (default: the last 5 successful `build`/`run` runs).
+  **Credits per run = the node's total over the window ÷ the number of runs in the window**, not an average over the
+  runs the node appeared in. A model built in 1 of 5 runs (a `--select` build, a subset schedule) costs a fifth of
+  its build per run; averaging over its appearances would overstate its share, rank and monthly saving 5×. Report
+  `runs_built` when it's below the window.
 - **Exclude the parent `EXECUTE DBT PROJECT` query** (`query_type = 'CALL'`). It runs for the whole build, so counting it would double-count every model's queries. With `estimated` credits, leave it out of all totals. With `attributed` credits, report it separately as dbt orchestration overhead.
 - **Python models:** the comment lands on the outer node query (a stored-procedure call), but the Snowpark query that actually writes the table (`CREATE ... TABLE <db>.<schema>.<model>`) has no comment. The outer query's time already includes that write query.
   - Credits depend on the source. **`estimated`:** use the outer node query only and drop the write query's credits;
@@ -60,7 +69,9 @@ table above and lower confidence on the estimate instead of guessing a multiplie
   Verified failure mode: averaging the Tasty Bytes cache hits in as zero put the `ORDER_DETAIL` relationships test at 2.7% instead of ~5%, so R6 wrongly missed.
 - **Ignore session setup** (`USE ...`, `SELECT CURRENT_*()`, `SHOW ...`). These are hundreds of near-zero queries per run, and including them only adds noise.
 
-Verified on the Tasty Bytes builds: the parent CALL made up about 47% of the raw estimated credits; the Python model's write query had no comment; and the second build's tests all came from cache. The first `relationships` test on `order_detail` took 11.3s and scanned 5.2 GB; in the second build it took 0.2s and scanned 0 bytes.
+Verified on the Tasty Bytes builds: in build 1's time window, the same user ran 387 queries. 61 carry a `node_id`,
+and 54 are linked to the build by `root_query_id` (53 commented, plus the Python write query, the only uncommented
+one). Linking by `root_query_id` reproduces the per-model credits exactly. The parent CALL made up about 47% of the raw estimated credits; the Python model's write query had no comment; and the second build's tests all came from cache. The first `relationships` test on `order_detail` took 11.3s and scanned 5.2 GB; in the second build it took 0.2s and scanned 0 bytes.
 
 ### Per-model metrics
 

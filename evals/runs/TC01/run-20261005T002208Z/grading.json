@@ -1,0 +1,119 @@
+{
+  "auto": [
+    {
+      "check": "skill_invoked (dbt-cost-tuning)",
+      "pass": true
+    },
+    {
+      "check": "plan_header",
+      "pass": true
+    },
+    {
+      "check": "section_where_cost",
+      "pass": true
+    },
+    {
+      "check": "section_recommendations",
+      "pass": true
+    },
+    {
+      "check": "section_below_threshold",
+      "pass": true
+    },
+    {
+      "check": "section_not_evaluable",
+      "pass": true
+    },
+    {
+      "check": "section_assumptions",
+      "pass": true
+    },
+    {
+      "check": "credit_source_label",
+      "pass": true
+    },
+    {
+      "check": "r1_incremental_orders",
+      "pass": true
+    },
+    {
+      "check": "r1_is_incremental_filter",
+      "pass": true
+    },
+    {
+      "check": "r1_unique_key",
+      "pass": true
+    },
+    {
+      "check": "r1_full_refresh_reminder",
+      "pass": true
+    },
+    {
+      "check": "r6_relationships_test",
+      "pass": true
+    },
+    {
+      "check": "offers_local_diff",
+      "pass": true
+    },
+    {
+      "check": "fanout_flagged",
+      "pass": true
+    },
+    {
+      "check": "needs_owner_review_section",
+      "pass": true
+    },
+    {
+      "check": "no_drop_recommendation",
+      "pass": true
+    },
+    {
+      "check": "no_unique_order_detail_claim",
+      "pass": true
+    },
+    {
+      "check": "no_r5_recommendation",
+      "pass": true
+    },
+    {
+      "check": "read_only_snowflake (0 non-read statements)",
+      "pass": true
+    },
+    {
+      "check": "account_usage_queries_time_bounded",
+      "pass": true
+    },
+    {
+      "check": "no_failed_skill_queries",
+      "pass": true
+    },
+    {
+      "check": "session_completed (every prompt answered, no timeout)",
+      "pass": true
+    },
+    {
+      "check": "no_repo_edits (git status unchanged outside evals/runs)",
+      "pass": true
+    }
+  ],
+  "manual": {
+    "Skill loaded (transcript shows dbt-cost-tuning / SKILL.md read)": true,
+    "Phase 0 checkpoint shown and agent ended its turn (waited) before Q1": true,
+    "Window = 2 successful runs": true,
+    "orders is 80\u201390% of credits (estimated \u2248 81%, attributed \u2248 87%) and ranked #1": true,
+    "R1 on orders is #1 with a concrete diff on order_ts, real file path, lookback filter": true,
+    "Proposed unique_key verified with Q6; order_detail_id NOT claimed unique": true,
+    "Join fan-out reported (693.7M vs 673.7M rows; duplicate franchise_id)": true,
+    "R6 fires on the ORDER_DETAIL relationships test (5\u20137% after zero-scan costing)": true,
+    "R3 listed under 'Observed, below threshold' (Signal ~50)": true,
+    "R4 under 'Needs owner review' (30-day / dev guard), not recommended": true,
+    "R2 and R5 on the 'Evaluated, didn't fire' line only (R5: gate failed), not under 'Not evaluable' or Recommendations": true,
+    "Parent EXECUTE DBT PROJECT excluded; Python write query's credits dropped if estimated, added if attributed": true,
+    "Credit source label has a one-line reason": true,
+    "No hallucinated models, columns or numbers (spot-check 3 figures against baseline_runs.md)": true,
+    "Header credit label is 'mixed' when any node isn't fully attributed": true
+  },
+  "verdict": "Pass",
+  "override_reason": null
+}
