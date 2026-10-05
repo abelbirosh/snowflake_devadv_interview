@@ -18,9 +18,9 @@ Tick manual checks with `[x]`, set the verdict line if you disagree with the com
 
 ## Manual checks
 
-- [ ] Continued instead of stopping
-- [ ] R2, R3, R4 listed as not evaluable with the grant that enables each
-- [ ] R1 still fires on orders
+- [x] Continued instead of stopping
+- [x] R2, R3, R4 listed as not evaluable with the grant that enables each
+- [x] R1 still fires on orders
 - [ ] No spill numbers reported (not available in INFORMATION_SCHEMA)
 
 ## Verdict override (optional: Pass / Partial / Fail, with reason)
