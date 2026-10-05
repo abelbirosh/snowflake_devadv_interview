@@ -289,7 +289,7 @@ WHERE query_id = '<RUN_ID>';
 ```
 Step 2 takes that user's queries during the run, and keeps dbt's own (same rule as Q3 for unattributed queries).
 `USER_NAME` is matched as an identifier: pass the name exactly as step 1 returns it, inside double quotes. Unquoted,
-a lowercase name like `abelbirosh` matches nothing and the step silently returns 0 rows:
+a lowercase name like `jdoe` matches nothing and the step silently returns 0 rows:
 ```sql
 WITH h AS (
   SELECT * FROM TABLE(<DB>.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER(
